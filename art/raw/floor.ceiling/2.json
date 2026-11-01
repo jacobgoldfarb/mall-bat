@@ -1,0 +1,13 @@
+{
+  "prompt": "top side of a dusty gray acoustic drop ceiling tile, fiberglass texture, thin metal grid on the edges. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 943965790,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

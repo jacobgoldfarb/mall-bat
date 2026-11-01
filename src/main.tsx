@@ -8,10 +8,18 @@ import { scheduleInspection } from './game/inspect';
 import { dayOf, phaseAt } from './game/time';
 import { LAYOUT } from './game/layout';
 import { attachInput, updateKeyboardPan } from './input';
+import { BODY_FONT, DISPLAY_FONT } from './render/draw';
 import { Renderer } from './render/renderer';
+import { loadSprites } from './render/sprites';
 import { App, startGame } from './ui/App';
+import '@fontsource/pixelify-sans/latin-400.css';
+import '@fontsource/pixelify-sans/latin-600.css';
+import '@fontsource/jersey-10/latin-400.css';
+import '@fontsource/silkscreen/latin-400.css';
+import '@fontsource/vt323/latin-400.css';
 import './ui/styles.css';
 
+await Promise.all([loadSprites(), document.fonts.load(`600 10px ${BODY_FONT}`), document.fonts.load(`20px ${DISPLAY_FONT}`)]);
 const canvas = document.getElementById('world') as HTMLCanvasElement;
 const renderer = new Renderer(canvas);
 app.renderer = renderer;

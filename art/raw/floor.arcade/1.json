@@ -1,0 +1,13 @@
+{
+  "prompt": "dark navy arcade carpet with neon pink, cyan and yellow cosmic squiggles, triangles and planets. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 863155286,
+  "width": 64,
+  "height": 64,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

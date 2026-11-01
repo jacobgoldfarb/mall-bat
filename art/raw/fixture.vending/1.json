@@ -1,0 +1,12 @@
+{
+  "prompt": "red soda vending machine with glowing front panel of soda buttons, a dent where someone kicked it. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 929893809,
+  "width": 48,
+  "height": 80,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

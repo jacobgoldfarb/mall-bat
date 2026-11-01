@@ -5,6 +5,7 @@ import { clearSave, hasSave, loadGame, newGame, saveGame } from '../game/create'
 import { ACHIEVEMENTS } from '../game/ops';
 import type { Difficulty, GameState } from '../game/state';
 import { LAYOUT } from '../game/layout';
+import { Icon } from './icons';
 import { BottomBar, BuildPanel, CrewPanel, GameOver, LogPanel, ModalView, ObjectiveCard, SelectedObject, Toasts, Tooltip, TopBar } from './hud';
 
 export function startGame(s: GameState) {
@@ -47,14 +48,20 @@ export function App() {
   return (
     <div class="hud">
       <TopBar s={s} />
-      <ObjectiveCard s={s} />
+      <div class="center-stack">
+        <ObjectiveCard s={s} />
+        {app.paused && !s.modals.length && app.menu === 'none' && (
+          <div class="paused-banner">
+            PAUSED<kbd>Space</kbd>
+          </div>
+        )}
+      </div>
       <BuildPanel s={s} />
       <CrewPanel s={s} />
       <LogPanel s={s} />
       <BottomBar s={s} />
       <SelectedObject s={s} />
       {!app.view.dragStart && app.menu === 'none' && !s.modals.length && <Tooltip s={s} />}
-      {app.paused && !s.modals.length && app.menu === 'none' && <div class="paused-banner">PAUSED · Space to resume</div>}
       <Toasts />
       {!s.over && <ModalView s={s} />}
       {s.over && (
@@ -95,7 +102,7 @@ function Title() {
         <div class="title-buttons">
           {save && (
             <button
-              class="aqua big"
+              class="btn big"
               onClick={() => {
                 audio.start();
                 const s = loadGame();
@@ -106,7 +113,7 @@ function Title() {
             </button>
           )}
           <button
-            class="aqua big"
+            class="btn big"
             onClick={() => {
               audio.start();
               app.menu = 'newgame';
@@ -115,14 +122,14 @@ function Title() {
           >
             New Game
           </button>
-          <button class="aqua big" onClick={() => ((app.menu = 'help'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'help'), refresh())}>
             How to Play
           </button>
-          <button class="aqua big" onClick={() => ((app.menu = 'settings'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'settings'), refresh())}>
             Settings
           </button>
           {window.desktop && (
-            <button class="aqua big" onClick={() => window.desktop!.quit()}>
+            <button class="btn big" onClick={() => window.desktop!.quit()}>
               Quit
             </button>
           )}
@@ -162,7 +169,7 @@ function NewGame() {
         </div>
         <div class="modal-choices">
           <button
-            class="aqua big"
+            class="btn big"
             onClick={() => {
               clearSave();
               startGame(newGame(name.trim() || 'Jace', diff));
@@ -170,7 +177,7 @@ function NewGame() {
           >
             Find the ladder
           </button>
-          <button class="aqua big" onClick={() => ((app.menu = 'none'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'none'), refresh())}>
             Back
           </button>
         </div>
@@ -185,11 +192,11 @@ function PauseMenu({ s }: { s: GameState }) {
       <div class="modal panel pause">
         <h2>Paused</h2>
         <div class="title-buttons">
-          <button class="aqua big" onClick={() => ((app.menu = 'none'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'none'), refresh())}>
             Resume
           </button>
           <button
-            class="aqua big"
+            class="btn big"
             onClick={() => {
               saveGame(s);
               app.menu = 'none';
@@ -199,18 +206,18 @@ function PauseMenu({ s }: { s: GameState }) {
           >
             Save
           </button>
-          <button class="aqua big" onClick={() => ((app.menu = 'help'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'help'), refresh())}>
             How to Play
           </button>
-          <button class="aqua big" onClick={() => ((app.menu = 'settings'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = 'settings'), refresh())}>
             Settings
           </button>
-          <button class="aqua big" onClick={quitToTitle}>
+          <button class="btn big" onClick={quitToTitle}>
             Save & Quit to Title
           </button>
           {window.desktop && (
             <button
-              class="aqua big"
+              class="btn big"
               onClick={() => {
                 saveGame(s);
                 window.desktop!.quit();
@@ -224,7 +231,7 @@ function PauseMenu({ s }: { s: GameState }) {
           <div class="achievements">
             {Object.entries(ACHIEVEMENTS).map(([id, a]) => (
               <i class={s.achievements.includes(id) ? '' : 'locked'} title={a.desc}>
-                {s.achievements.includes(id) ? '🏆' : '🔒'} {a.name}
+                <Icon name="trophy" size={16} /> {a.name}
               </i>
             ))}
           </div>
@@ -274,12 +281,12 @@ function Settings() {
           <span>Auto-pause when an inspection is scheduled</span>
         </label>
         {window.desktop && (
-          <button class="aqua" onClick={() => window.desktop!.toggleFullscreen()}>
+          <button class="btn" onClick={() => window.desktop!.toggleFullscreen()}>
             Toggle fullscreen
           </button>
         )}
         <div class="modal-choices">
-          <button class="aqua big" onClick={() => ((app.menu = app.screen === 'game' ? 'pause' : 'none'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = app.screen === 'game' ? 'pause' : 'none'), refresh())}>
             Done
           </button>
         </div>
@@ -295,40 +302,54 @@ function Help() {
         <h2>How to Squat a Mall</h2>
         <div class="help-grid">
           <section>
-            <h4>🪜 The Ceiling</h4>
+            <h4>
+              <Icon name="art.intro" /> The Ceiling
+            </h4>
             <p>Your kingdom lives above the drop ceiling. Lay <b>plywood decks</b> out from the ladder hatch in the Service Corridor, then furnish. Press <b>Tab</b> to switch between the Ceiling and the Mall.</p>
           </section>
           <section>
-            <h4>🔊 What's Below Matters</h4>
+            <h4>
+              <Icon name="leisure" /> What's Below Matters
+            </h4>
             <p>Every store has <b>noise cover</b> and <b>smell cover</b>. Your TV is fine above the screaming Fun Zone arcade and a disaster above Boundaries Books. Cook above Cinnabomb. Use the <b>Complaints</b>, <b>Noise</b>, and <b>Smell</b> overlays.</p>
           </section>
           <section>
-            <h4>🔦 Inspections</h4>
+            <h4>
+              <Icon name="art.gary" /> Inspections
+            </h4>
             <p>When a store's complaints hit 100%, someone checks its ceiling the next morning. The red zone shows where. Clear it out, or plant a <b>Decoy Raccoon</b>. Anything they find raises the Alert.</p>
           </section>
           <section>
-            <h4>⚡ Power Bills</h4>
+            <h4>
+              <Icon name="power" /> Power Bills
+            </h4>
             <p>Power Splices steal from the store below. Every Monday at 8 AM the bills get reviewed, and a greedy splice gets an electrician. Spread your load. Vacant stores have no power.</p>
           </section>
           <section>
-            <h4>🌙 Jobs</h4>
+            <h4>
+              <Icon name="work" /> Jobs
+            </h4>
             <p>Give each rat a <b>Day</b> and <b>Night</b> job. Day jobs blend into the crowd but build recognition with the mall cop. Night jobs pay better but Gary, the cameras, and the janitors are watching. <b>Rope Drops</b> are escape hatches.</p>
           </section>
           <section>
-            <h4>🚨 Alert</h4>
+            <h4>
+              <Icon name="alert" /> Alert
+            </h4>
             <p>Sightings, catches, and discoveries raise the Mall Alert. Higher levels bring more cameras, a second guard, and a dog. At <b>100%</b> they sweep the ceiling and you're evicted. It cools down when you lay low.</p>
           </section>
           <section>
-            <h4>💰 The Goal</h4>
+            <h4>
+              <Icon name="cash" /> The Goal
+            </h4>
             <p>Galleria Pointe goes to auction on <b>Dec 31, 2004</b>. Have more <b>cash</b> than the developer bids. As stores close, the mall dies and the bid drops.</p>
           </section>
           <section>
-            <h4>⌨ Controls</h4>
+            <h4>Controls</h4>
             <p>Right-drag or WASD to pan · Wheel to zoom · Space to pause · 1/2/3 for speed · B Build · X Remove · O cycle overlays · Alt for x-ray · H go to the hatch · Esc for the menu</p>
           </section>
         </div>
         <div class="modal-choices">
-          <button class="aqua big" onClick={() => ((app.menu = app.screen === 'game' ? 'pause' : 'none'), refresh())}>
+          <button class="btn big" onClick={() => ((app.menu = app.screen === 'game' ? 'pause' : 'none'), refresh())}>
             Got it
           </button>
         </div>

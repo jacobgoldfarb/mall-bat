@@ -1,0 +1,12 @@
+{
+  "prompt": "large square mall fountain with teal tiled basin and a tall cream concrete spout spraying water, pennies glinting in the water, a lost flip flop floating. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 589285783,
+  "width": 128,
+  "height": 112,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

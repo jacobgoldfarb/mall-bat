@@ -1,0 +1,12 @@
+{
+  "prompt": "bookstore cafe table, round dark wood with two chairs, a stack of paperbacks and a coffee cup. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 239037293,
+  "width": 64,
+  "height": 64,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

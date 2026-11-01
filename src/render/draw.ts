@@ -1,5 +1,6 @@
 import type { Look } from '../game/state';
 import { isoX, isoY, shade } from './iso';
+import { characterSprite, drawCharacterFrame, screenDirection, type CharacterSprite } from './sprites';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -93,6 +94,8 @@ export interface PersonOpts {
   walking: boolean;
   t: number;
   facingScreen: number;
+  facing?: number;
+  sprite?: string;
   crouch?: boolean;
   sleeping?: boolean;
   alpha?: number;
@@ -104,7 +107,62 @@ export interface PersonOpts {
   ladder?: boolean;
 }
 
+function drawLadder(ctx: Ctx, px: number, py: number) {
+  ctx.strokeStyle = '#b8b8b8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(px - 9, py);
+  ctx.lineTo(px - 11, py - 40);
+  ctx.moveTo(px - 3, py);
+  ctx.lineTo(px - 5, py - 40);
+  for (let i = 1; i < 6; i++) {
+    ctx.moveTo(px - 9 - i * 0.33, py - i * 7);
+    ctx.lineTo(px - 3 - i * 0.33, py - i * 7);
+  }
+  ctx.stroke();
+}
+
+const WALK_FPS = 0.3;
+
+function drawSpritePerson(ctx: Ctx, sprite: CharacterSprite, px: number, py: number, o: PersonOpts) {
+  const dir = screenDirection(o.facing ?? Math.PI / 4);
+  ctx.save();
+  ctx.globalAlpha = o.alpha ?? 1;
+  ellipse(ctx, px, py, 9, 4, 'rgba(0,0,0,0.28)');
+  if (o.sleeping) {
+    ctx.translate(px, py - 6);
+    ctx.rotate(-Math.PI / 2);
+    drawCharacterFrame(ctx, sprite, 0, sprite.footY - sprite.frame / 2, 0, 0);
+    ctx.restore();
+    return;
+  }
+  const frame = Math.floor(o.t * WALK_FPS);
+  const sneaking = o.crouch && o.walking && sprite.sneak > 0;
+  const col = sneaking ? 1 + sprite.walk + (frame % sprite.sneak) : o.walking && sprite.walk ? 1 + (frame % sprite.walk) : 0;
+  if (o.crouch && !sneaking) {
+    ctx.translate(px, py);
+    ctx.scale(1, 0.82);
+    drawCharacterFrame(ctx, sprite, 0, 0, dir, col);
+  } else drawCharacterFrame(ctx, sprite, px, py, dir, col);
+  ctx.restore();
+  if (o.carry) {
+    ctx.fillStyle = '#c9a46a';
+    ctx.fillRect(px - 5, py - 24, 10, 7);
+    ctx.fillStyle = '#8a6a40';
+    ctx.fillRect(px - 5, py - 21, 10, 1);
+  }
+  if (o.ladder) drawLadder(ctx, px, py);
+  if (o.dog) {
+    const flip = o.facingScreen < 0 ? -1 : 1;
+    const dog = characterSprite('char.npc.dog');
+    if (dog) drawCharacterFrame(ctx, dog, px - 14 * flip, py + 4, dir, o.walking && dog.walk ? 1 + (frame % dog.walk) : 0);
+    else drawDog(ctx, px - 12 * flip, py + 3, o.t, o.walking, flip);
+  }
+}
+
 export function drawPerson(ctx: Ctx, px: number, py: number, look: Look, o: PersonOpts) {
+  const sprite = o.sprite ? characterSprite(o.sprite) : null;
+  if (sprite) return drawSpritePerson(ctx, sprite, px, py, o);
   const s = look.build;
   ctx.save();
   ctx.globalAlpha = o.alpha ?? 1;
@@ -183,20 +241,7 @@ export function drawPerson(ctx: Ctx, px: number, py: number, look: Look, o: Pers
     ctx.stroke();
     ellipse(ctx, px + 12 * flip, py, 3.5, 1.5, '#ddd');
   }
-  if (o.ladder) {
-    ctx.strokeStyle = '#b8b8b8';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(px - 9, py);
-    ctx.lineTo(px - 11, py - 40);
-    ctx.moveTo(px - 3, py);
-    ctx.lineTo(px - 5, py - 40);
-    for (let i = 1; i < 6; i++) {
-      ctx.moveTo(px - 9 - i * 0.33, py - i * 7);
-      ctx.lineTo(px - 3 - i * 0.33, py - i * 7);
-    }
-    ctx.stroke();
-  }
+  if (o.ladder) drawLadder(ctx, px, py);
 
   const headY = bodyTop - 4.6 * s;
   ellipse(ctx, px, headY, 4.7 * s, 4.9 * s, look.skin);
@@ -282,8 +327,11 @@ export function drawDog(ctx: Ctx, px: number, py: number, t: number, walking: bo
   ctx.fillRect(px - 8 * flip - 1, py - 13 + Math.sin(t * 0.8) * 1.5, 2, 4);
 }
 
+export const BODY_FONT = '"Pixelify Sans", Verdana, sans-serif';
+export const DISPLAY_FONT = '"Jersey 10", "Arial Black", sans-serif';
+
 export function bubble(ctx: Ctx, px: number, py: number, text: string, tone?: 'alert' | 'info' | 'happy') {
-  ctx.font = 'bold 10px Verdana, Tahoma, sans-serif';
+  ctx.font = `600 11px ${BODY_FONT}`;
   const w = ctx.measureText(text).width + 10;
   const bg = tone === 'alert' ? '#ff2d55' : tone === 'happy' ? '#2fd17a' : tone === 'info' ? '#ffd23f' : '#ffffff';
   const fg = tone === 'alert' ? '#fff' : '#111';
@@ -304,11 +352,11 @@ export function bubble(ctx: Ctx, px: number, py: number, text: string, tone?: 'a
   ctx.fillText(text, px, py - 10.2);
 }
 
-export function isoText(ctx: Ctx, text: string, x: number, y: number, z: number, dir: 'x' | 'y', size: number, color: string, opts: { font?: string; glow?: string; maxWidth?: number } = {}) {
+export function isoText(ctx: Ctx, text: string, x: number, y: number, z: number, dir: 'x' | 'y', size: number, color: string, opts: { glow?: string; maxWidth?: number } = {}) {
   ctx.save();
   ctx.translate(isoX(x, y), isoY(x, y, z));
   ctx.transform(1, dir === 'x' ? 0.5 : -0.5, 0, 1, 0, 0);
-  ctx.font = `${opts.font ?? 'bold'} ${size}px "Arial Black", "Trebuchet MS", sans-serif`;
+  ctx.font = `${size * 1.3}px ${DISPLAY_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (opts.glow) {

@@ -1,0 +1,13 @@
+{
+  "prompt": "raw plywood sheet, light wood grain, a few nail heads. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 566551378,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

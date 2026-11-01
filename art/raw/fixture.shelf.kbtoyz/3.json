@@ -1,0 +1,12 @@
+{
+  "prompt": "toy store shelf with boxed action figures, yo-yos and colorful toys, a furby staring out. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 372169895,
+  "width": 48,
+  "height": 64,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

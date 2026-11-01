@@ -27,6 +27,7 @@ export interface AppState {
   renderer: Renderer | null;
   tick: number;
   logOpen: boolean;
+  objectiveOpen: boolean;
   crewExpanded: number | null;
   autoPause: boolean;
   uiScale: number;
@@ -57,6 +58,7 @@ export const app: AppState = {
   renderer: null,
   tick: 0,
   logOpen: true,
+  objectiveOpen: true,
   crewExpanded: null,
   autoPause: localStorage.getItem('dropceiling.autopause') !== '0',
   uiScale: 1,

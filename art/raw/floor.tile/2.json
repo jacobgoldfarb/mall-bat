@@ -1,0 +1,13 @@
+{
+  "prompt": "light gray square ceramic floor tile with thin darker grout lines on the edges, subtle scuffs. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 713745711,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

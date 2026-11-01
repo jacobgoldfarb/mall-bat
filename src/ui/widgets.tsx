@@ -4,8 +4,9 @@ import type { Look } from '../game/state';
 import { drawPerson } from '../render/draw';
 import { isoX, isoY } from '../render/iso';
 import { drawBuildable } from '../render/objects';
+import { characterSprite, drawPortrait } from '../render/sprites';
 
-export function Portrait({ look, size = 44, bg = '#1a2040' }: { look: Look; size?: number; bg?: string }) {
+export function Portrait({ look, sprite, size = 44, bg = '#1a2040' }: { look: Look; sprite?: string; size?: number; bg?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current!;
@@ -19,13 +20,15 @@ export function Portrait({ look, size = 44, bg = '#1a2040' }: { look: Look; size
     g.addColorStop(1, '#0a0c1a');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
+    const s = sprite ? characterSprite(sprite) : null;
+    if (s) return drawPortrait(ctx, s, size);
     const scale = size / 26;
     ctx.save();
     ctx.translate(size / 2, size * 1.25);
     ctx.scale(scale, scale);
     drawPerson(ctx, 0, 0, look, { walking: false, t: 0, facingScreen: 0.0001 });
     ctx.restore();
-  }, [look, size, bg]);
+  }, [look, sprite, size, bg]);
   return <canvas ref={ref} class="portrait" style={{ width: size, height: size }} />;
 }
 
@@ -39,6 +42,7 @@ export function BuildIcon({ type, size = 40 }: { type: BuildId; size?: number })
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
+    ctx.imageSmoothingEnabled = false;
     const scale = size / 52;
     ctx.save();
     ctx.translate(size / 2, size * 0.42);

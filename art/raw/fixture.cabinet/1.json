@@ -1,0 +1,12 @@
+{
+  "prompt": "retro upright arcade cabinet, purple side art, glowing screen and joystick, a coin stuck in the slot. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 730698873,
+  "width": 48,
+  "height": 80,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

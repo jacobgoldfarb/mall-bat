@@ -24,9 +24,10 @@ import type { Crew, GameState, Npc } from '../game/state';
 import { dayOf, minuteOfDay, phaseAt } from '../game/time';
 import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, getDerived } from '../game/world';
 import { popupName } from '../game/sim';
-import { bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx } from './draw';
+import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
 import { drawBuildable, drawFixture } from './objects';
+import { characterIds, drawPropSprite, texture, type Texture } from './sprites';
 
 export type Overlay = 'none' | 'noise' | 'smell' | 'power' | 'complaints';
 
@@ -50,6 +51,58 @@ interface Drawable {
 const WALL_H = 18;
 const OUTER_H = 46;
 const FRONT_H = 7;
+const MAP_X = isoX(0, H);
+const MAP_W = isoX(W, 0) - MAP_X;
+const MAP_H = isoY(W, H);
+
+interface FloorLook {
+  tex: Texture;
+  mul: [number, number, number] | null;
+  flip: boolean;
+}
+
+function floorLook(id: string, x: number, y: number, color?: string): FloorLook | null {
+  const tex = texture(id);
+  if (!tex) return null;
+  const n = color ? parseInt(color.slice(1), 16) : 0;
+  const mul: FloorLook['mul'] = color ? [((n >> 16) & 255) / tex.avg[0], ((n >> 8) & 255) / tex.avg[1], (n & 255) / tex.avg[2]] : null;
+  return { tex, mul, flip: !tex.tint && hash2(x, y, 21) > 0.5 };
+}
+
+function bakeIso(width: number, height: number, originX: number, lookAt: (tx: number, ty: number) => FloorLook | null): ImageData {
+  const img = new ImageData(width, height);
+  const cache = new Map<number, FloorLook | null>();
+  for (let py = 0; py < height; py++) {
+    const b = (py + 0.5) / (TH / 2);
+    for (let px = 0; px < width; px++) {
+      const a = (px + originX + 0.5) / (TW / 2);
+      const wx = (a + b) / 2;
+      const wy = (b - a) / 2;
+      const tx = Math.floor(wx);
+      const ty = Math.floor(wy);
+      const key = ty * 4096 + tx;
+      let look = cache.get(key);
+      if (look === undefined) {
+        look = lookAt(tx, ty);
+        cache.set(key, look);
+      }
+      if (!look) continue;
+      const { size, data } = look.tex;
+      const span = size / 32;
+      let u = (((tx % span) + span) % span + wx - tx) / span;
+      const v = (((ty % span) + span) % span + wy - ty) / span;
+      if (look.flip) u = 1 - u;
+      const si = (Math.min(size - 1, Math.floor(v * size)) * size + Math.min(size - 1, Math.floor(u * size))) * 4;
+      const o = (py * width + px) * 4;
+      const m = look.mul;
+      img.data[o] = m ? data[si] * m[0] : data[si];
+      img.data[o + 1] = m ? data[si + 1] * m[1] : data[si + 1];
+      img.data[o + 2] = m ? data[si + 2] * m[2] : data[si + 2];
+      img.data[o + 3] = 255;
+    }
+  }
+  return img;
+}
 
 export class Renderer {
   ctx: Ctx;
@@ -59,7 +112,10 @@ export class Renderer {
   height = 0;
   private floorSig = '';
   private floor = new Map<string, Path2D>();
+  private floorCanvas = document.createElement('canvas');
   private ceilingTiles = new Map<string, Path2D>();
+  private ceilingCanvas: HTMLCanvasElement | null = null;
+  private deckTiles: HTMLCanvasElement[] = [];
   private light: HTMLCanvasElement;
   private lctx: Ctx;
   private signs: { room: number; x: number; y: number; dir: 'x' | 'y' }[] = [];
@@ -160,15 +216,59 @@ export class Renderer {
     if (sig === this.floorSig) return;
     this.floorSig = sig;
     this.floor.clear();
+    const looks = new Map<number, FloorLook | null>();
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const ri = LAYOUT.roomAt[idx(x, y)];
         if (ri < 0) continue;
         const r = LAYOUT.rooms[ri];
         const vacant = s.rooms[ri].vacant && !s.rooms[ri].popup;
-        this.floorTile(r, x, y, vacant);
+        const look = this.texturedFloor(r, x, y, vacant);
+        looks.set(idx(x, y), look);
+        if (look) this.floorOverlay(r, x, y, vacant);
+        else this.floorTile(r, x, y, vacant);
       }
     }
+    const c = this.floorCanvas;
+    c.width = MAP_W;
+    c.height = MAP_H;
+    const fctx = c.getContext('2d')!;
+    fctx.putImageData(bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (inBounds(tx, ty) ? (looks.get(idx(tx, ty)) ?? null) : null)), 0, 0);
+    fctx.translate(-MAP_X, 0);
+    for (const [color, path] of this.floor) {
+      fctx.fillStyle = color;
+      fctx.fill(path);
+    }
+  }
+
+  private texturedFloor(r: RoomDef, x: number, y: number, vacant: boolean): FloorLook | null {
+    if (vacant) return floorLook('floor.vacant', x, y) ?? floorLook('floor.concrete', x, y, '#58534b');
+    const base = r.floorColor;
+    switch (r.floor) {
+      case 'court': {
+        const ring = Math.max(Math.abs(x + 0.5 - 24), Math.abs(y + 0.5 - 14));
+        return floorLook('floor.tile', x, y, Math.floor(ring) % 2 ? '#2aa6a0' : '#e8dcc6');
+      }
+      case 'checker':
+        return floorLook('floor.tile', x, y, (x + y) % 2 ? base : '#2aa6a0');
+      case 'dock':
+        return floorLook('floor.concrete', x, y, base);
+      case 'asphalt':
+        return floorLook('floor.asphalt', x, y) ?? floorLook('floor.concrete', x, y, base);
+      case 'terrazzo':
+      case 'arcade':
+      case 'luxe':
+        return floorLook(`floor.${r.floor}`, x, y);
+      default:
+        return floorLook(`floor.${r.floor}`, x, y, base) ?? floorLook('floor.tile', x, y, base);
+    }
+  }
+
+  private floorOverlay(r: RoomDef, x: number, y: number, vacant: boolean) {
+    if (vacant) return;
+    if (r.floor === 'asphalt' && y >= 25 && x % 3 === 0 && (x < 21 || x > 26)) diamondPath(this.add(this.floor, '#d8d8d8'), x, y, 0.06, 1);
+    if (r.floor === 'luxe' && (x === r.x0 || x === r.x1 || y === r.y0 || y === r.y1)) diamondPath(this.add(this.floor, '#c9a23a'), x, y, 1, 1, 0, 0.35);
+    if (r.floor === 'dock' && (y === 3 || x === 42)) for (let k = 0; k < 3; k++) diamondPath(this.add(this.floor, '#e8c22a'), x + k * 0.33, y + 0.4, 0.16, 0.2);
   }
 
   private floorTile(r: RoomDef, x: number, y: number, vacant: boolean) {
@@ -266,6 +366,31 @@ export class Renderer {
   }
 
   private buildCeilingTiles() {
+    const deck = texture('floor.deck');
+    if (deck)
+      this.deckTiles = [false, true].map((flip) => {
+        const c = document.createElement('canvas');
+        c.width = TW;
+        c.height = TH;
+        const dctx = c.getContext('2d')!;
+        dctx.putImageData(bakeIso(TW, TH, -TW / 2, (tx, ty) => (tx === 0 && ty === 0 ? { tex: deck, mul: null, flip } : null)), 0, 0);
+        dctx.strokeStyle = 'rgba(70,40,20,0.45)';
+        dctx.beginPath();
+        dctx.moveTo(0, TH / 2);
+        dctx.lineTo(TW / 2, TH - 0.5);
+        dctx.lineTo(TW, TH / 2);
+        dctx.stroke();
+        return c;
+      });
+    const open = (x: number, y: number) => inBounds(x, y) && [C_OPEN, C_DUCT, C_AC].includes(LAYOUT.ceilingKind[idx(x, y)]);
+    const ceiling = floorLook('floor.ceiling', 0, 0);
+    if (ceiling) {
+      const c = (this.ceilingCanvas = document.createElement('canvas'));
+      c.width = MAP_W;
+      c.height = MAP_H;
+      c.getContext('2d')!.putImageData(bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (open(tx, ty) ? { ...ceiling, flip: hash2(tx, ty, 4) > 0.5 } : null)), 0, 0);
+      return;
+    }
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const k = LAYOUT.ceilingKind[idx(x, y)];
@@ -287,11 +412,8 @@ export class Renderer {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const z = this.cam.zoom * this.dpr;
     ctx.setTransform(z, 0, 0, z, this.cam.x * this.dpr, this.cam.y * this.dpr);
-
-    for (const [color, path] of this.floor) {
-      ctx.fillStyle = color;
-      ctx.fill(path);
-    }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.floorCanvas, MAP_X, 0);
 
     const items: Drawable[] = [];
     this.collectWalls(s, items, v.layer === 1);
@@ -389,6 +511,7 @@ export class Renderer {
                 return;
               }
               faceQuad(ctx, x0, y0, x1, y1, 0, height, c);
+              faceQuad(ctx, x0, y0, x1, y1, 0, 2, shade(c, -0.28));
               faceQuad(ctx, x0, y0, x1, y1, height - 1.4, height, shade(c, 0.18));
               if (e === E_STAFF) {
                 const m = 0.2;
@@ -471,6 +594,8 @@ export class Renderer {
       walking: n.moving,
       t: t + n.id * 7,
       facingScreen: this.facingScreen(n),
+      facing: n.facing,
+      sprite: npcSprite(n),
       segway: n.kind === 'dayguard',
       flash: n.kind === 'guard' && night,
       dog: n.dog,
@@ -493,6 +618,8 @@ export class Renderer {
       walking: c.moving,
       t: t + c.id * 5,
       facingScreen: this.facingScreen(c),
+      facing: c.facing,
+      sprite: crewSprite(c.archetype),
       crouch: c.hiding || (c.layer === 1 && !c.moving && !sleeping),
       sleeping,
       alpha: c.hiding ? 0.75 : 1,
@@ -522,7 +649,7 @@ export class Renderer {
         ctx.arc(px, py - 6, 7, -Math.PI / 2, -Math.PI / 2 + Math.min(1, c.detect) * Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = ctx.strokeStyle;
-        ctx.font = 'bold 9px Verdana';
+        ctx.font = `600 10px ${BODY_FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(c.detect >= 1 ? '!' : '?', px, py - 6);
@@ -530,7 +657,7 @@ export class Renderer {
         bubble(ctx, px, py, c.bubble.text, c.bubble.tone);
       }
       if (v.selectedCrew === c.id || this.cam.zoom > 1.3) {
-        ctx.font = 'bold 9px Verdana, Tahoma';
+        ctx.font = `600 10px ${BODY_FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         const label = c.name;
@@ -729,7 +856,7 @@ export class Renderer {
       const px = isoX(ins.x + 0.5, ins.y + 0.5);
       const py = isoY(ins.x + 0.5, ins.y + 0.5, 60 + Math.sin(t * 0.1) * 3);
       ctx.fillStyle = '#ff2d55';
-      ctx.font = 'bold 18px "Arial Black", sans-serif';
+      ctx.font = `24px ${DISPLAY_FONT}`;
       ctx.textAlign = 'center';
       ctx.fillText('⚠', px, py);
     }
@@ -747,6 +874,7 @@ export class Renderer {
 
     ctx.save();
     ctx.globalAlpha = v.xray ? 0.25 : 0.86;
+    if (this.ceilingCanvas) ctx.drawImage(this.ceilingCanvas, MAP_X, 0);
     for (const [color, path] of this.ceilingTiles) {
       ctx.fillStyle = color;
       ctx.fill(path);
@@ -771,6 +899,10 @@ export class Renderer {
       if (!s.deck[i]) continue;
       const x = i % W;
       const y = Math.floor(i / W);
+      if (this.deckTiles.length) {
+        ctx.drawImage(this.deckTiles[hash2(x, y, 2) > 0.5 ? 1 : 0], isoX(x, y) - TW / 2, isoY(x, y, 1));
+        continue;
+      }
       ctx.fillStyle = hash2(x, y, 2) > 0.5 ? '#d2a66c' : '#dcb078';
       ctx.beginPath();
       diamondPath(ctx, x, y, 1, 1, 1, 0.01);
@@ -816,16 +948,28 @@ export class Renderer {
         items.push({
           depth: x + y + 1,
           order: 1,
-          fn: () =>
-            horiz
-              ? box(ctx, x - 0.01, y + 0.24, 1.02, 0.52, 10, '#6a7078', 3, { top: '#8a9098', left: '#5a6068', right: '#4a5058' })
-              : box(ctx, x + 0.24, y - 0.01, 0.52, 1.02, 10, '#6a7078', 3, { top: '#8a9098', left: '#5a6068', right: '#4a5058' }),
+          fn: () => {
+            const colors = { top: '#a5afb8', left: '#7e8a96', right: '#5a6574' };
+            if (horiz) box(ctx, x - 0.01, y + 0.24, 1.02, 0.52, 10, '#7e8a96', 3, colors);
+            else box(ctx, x + 0.24, y - 0.01, 0.52, 1.02, 10, '#7e8a96', 3, colors);
+            ctx.strokeStyle = 'rgba(38,44,56,0.55)';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            for (const u of [0.25, 0.75]) {
+              const [ax, ay, bx, by] = horiz ? [x + u, y + 0.24, x + u, y + 0.76] : [x + 0.24, y + u, x + 0.76, y + u];
+              ctx.moveTo(isoX(ax, ay), isoY(ax, ay, 13));
+              ctx.lineTo(isoX(bx, by), isoY(bx, by, 13));
+              ctx.lineTo(isoX(bx, by), isoY(bx, by, 3));
+            }
+            ctx.stroke();
+          },
         });
       } else if (k === C_AC && (x === 0 || LAYOUT.ceilingKind[idx(x - 1, y)] !== C_AC) && (y === 0 || LAYOUT.ceilingKind[idx(x, y - 1)] !== C_AC)) {
         items.push({
           depth: x + y + 2,
           order: 1,
           fn: () => {
+            if (drawPropSprite(ctx, 'build.ac', x, y, { w: 2, d: 2 })) return;
             box(ctx, x + 0.05, y + 0.05, 1.9, 1.9, 30, '#8a9098', 0, { top: '#a8aeb6' });
             ctx.save();
             ctx.translate(isoX(x + 1, y + 1), isoY(x + 1, y + 1, 30));
@@ -933,20 +1077,20 @@ export class Renderer {
         ctx.stroke();
         ctx.setLineDash([]);
         const label = `${o.supplyLoad}/${def.supply}W`;
-        ctx.font = 'bold 9px Verdana';
+        ctx.font = `600 10px ${BODY_FONT}`;
         ctx.fillStyle = '#ffe94a';
         ctx.textAlign = 'center';
         ctx.fillText(label, isoX(o.x + 0.5, o.y + 0.5), isoY(o.x + 0.5, o.y + 0.5, 22));
       } else if (def.power) {
         ctx.fillStyle = o.powered ? '#ffe94a' : '#ff2d55';
-        ctx.font = 'bold 11px Verdana';
+        ctx.font = `600 12px ${BODY_FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText(o.powered ? '⚡' : '✕', isoX(o.x + 0.5, o.y + 0.5), isoY(o.x + 0.5, o.y + 0.5, 30));
       }
     }
     if (pc) {
       ctx.fillStyle = '#5aff8a';
-      ctx.font = 'bold 9px Verdana';
+      ctx.font = `600 10px ${BODY_FONT}`;
       ctx.fillText(`Wi-Fi ${Math.round(boundariesSignal(pc.x, pc.y) * 100)}%`, isoX(pc.x + 0.5, pc.y + 0.5), isoY(pc.x + 0.5, pc.y + 0.5, 40));
     }
   }
@@ -1001,7 +1145,7 @@ export class Renderer {
       ctx.beginPath();
       ctx.ellipse(px, py, 5, 2.6, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.font = 'bold 8px Verdana';
+      ctx.font = `600 9px ${BODY_FONT}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.fillText(n.name.split(' ')[0], px, py - 6);
@@ -1036,14 +1180,18 @@ export class Renderer {
       if (small && this.cam.zoom < 0.9 && !rs.complaint) return;
       const hovered = !!v.hover && LAYOUT.roomAt[idx(Math.max(0, Math.min(W - 1, v.hover.x)), Math.max(0, Math.min(H - 1, v.hover.y)))] === ri;
       const name = rs.popup ? `${popupName(s)} (yours)` : rs.vacant ? `${r.name} (vacant)` : r.name;
-      ctx.font = `bold ${small ? 8 : 9}px Verdana, Tahoma`;
+      ctx.font = `600 ${small ? 9 : 10}px ${BODY_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const w = Math.max(ctx.measureText(name).width + 10, 50);
-      ctx.fillStyle = hovered ? 'rgba(20,40,70,0.92)' : 'rgba(8,6,16,0.5)';
-      roundRect(ctx, px - w / 2, py - 9, w, rs.vacant || rs.popup ? 16 : 22, 5);
-      ctx.fill();
-      ctx.fillStyle = rs.vacant ? '#999' : '#f4efe6';
+      const h = rs.vacant || rs.popup ? 16 : 22;
+      ctx.fillStyle = hovered ? 'rgba(15,74,82,0.95)' : 'rgba(27,22,34,0.62)';
+      ctx.fillRect(px - w / 2, py - 9, w, h);
+      if (hovered) {
+        ctx.fillStyle = '#5ccfc2';
+        ctx.fillRect(px - w / 2, py - 9, w, 1);
+      }
+      ctx.fillStyle = rs.vacant ? '#9a8f8f' : '#fbf6ec';
       ctx.fillText(name, px, py - 1);
       if (!rs.vacant && !rs.popup) {
         const c = Math.min(100, rs.complaint);
@@ -1052,8 +1200,8 @@ export class Renderer {
         ctx.fillStyle = complaintColor(s, ri, 1);
         ctx.fillRect(px - w / 2 + 5, py + 7, ((w - 10) * c) / 100, 3);
         if (v.overlay === 'complaints') {
-          const mask = `🔇${Math.round(r.noiseMask * 100)} 👃${Math.round(r.smellMask * 100)}`;
-          ctx.font = 'bold 8px Verdana';
+          const mask = `NOISE ${Math.round(r.noiseMask * 100)} · SMELL ${Math.round(r.smellMask * 100)}`;
+          ctx.font = `600 9px ${BODY_FONT}`;
           ctx.fillStyle = '#9fe0ff';
           ctx.fillText(mask, px, py + 19);
         }
@@ -1080,7 +1228,7 @@ export class Renderer {
       const px = isoX(ins.x + 0.5, ins.y + 0.5);
       const py = isoY(ins.x + 0.5, ins.y + 0.5, 40);
       const label = active ? (ins.state === 'climbing' ? 'INSPECTING NOW' : 'INSPECTOR EN ROUTE') : `${ins.kind === 'power' ? 'ELECTRICIAN' : ins.kind === 'fire' ? 'FIRE MARSHAL' : ins.kind === 'pest' ? 'PEST CONTROL' : 'INSPECTION'} ${dayOf(ins.at) === dayOf(s.time) ? 'TODAY' : 'TOMORROW'} ${Math.floor((ins.at % 1440) / 60)}:${String(Math.floor(ins.at % 60)).padStart(2, '0')}`;
-      ctx.font = 'bold 10px Verdana';
+      ctx.font = `600 11px ${BODY_FONT}`;
       ctx.textAlign = 'center';
       const w = ctx.measureText(label).width + 12;
       ctx.fillStyle = '#ff2d55';
@@ -1090,7 +1238,7 @@ export class Renderer {
       ctx.textBaseline = 'middle';
       ctx.fillText(label, px, py - 2);
       if (!scanner && !active) {
-        ctx.font = '8px Verdana';
+        ctx.font = `9px ${BODY_FONT}`;
         ctx.fillStyle = '#ffb0c0';
         ctx.fillText('Move your stuff or plant a decoy raccoon', px, py + 12);
       }
@@ -1139,7 +1287,7 @@ export class Renderer {
         }
         if (v.build === 'pc') {
           ctx.fillStyle = '#5aff8a';
-          ctx.font = 'bold 10px Verdana';
+          ctx.font = `600 11px ${BODY_FONT}`;
           ctx.textAlign = 'center';
           ctx.fillText(`Wi-Fi ${Math.round(boundariesSignal(x, y) * 100)}%`, isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5, 40));
         }
@@ -1147,7 +1295,7 @@ export class Renderer {
       if (tiles.length > 1) {
         const p = tiles[tiles.length - 1];
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px Verdana';
+        ctx.font = `600 12px ${BODY_FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText(`$${total}`, isoX(p[0] + 0.5, p[1] + 0.5), isoY(p[0] + 0.5, p[1] + 0.5, 20));
       }
@@ -1165,6 +1313,14 @@ export function dragDeckError(s: GameState, x: number, y: number): string | null
   const err = canPlace(s, 'deck', x, y);
   if (err === 'Must connect to your territory') return null;
   return err;
+}
+
+export const crewSprite = (archetype: string) => `char.crew.${archetype}`;
+
+function npcSprite(n: Npc): string {
+  if (n.kind !== 'shopper') return `char.npc.${n.kind}`;
+  const pool = characterIds('char.shopper.');
+  return pool.length ? pool[n.id % pool.length] : '';
 }
 
 function wallColor(r: RoomDef): string {

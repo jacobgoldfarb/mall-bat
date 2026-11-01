@@ -1,0 +1,1292 @@
+{
+ "props": {
+  "fixture.fountain": [
+   {
+    "file": "fixture.fountain.png",
+    "w": 100,
+    "h": 90,
+    "base": 100
+   }
+  ],
+  "fixture.palm": [
+   {
+    "file": "fixture.palm.png",
+    "w": 45,
+    "h": 78,
+    "base": 29
+   }
+  ],
+  "fixture.bench": [
+   {
+    "file": "fixture.bench.png",
+    "w": 38,
+    "h": 36,
+    "base": 38
+   }
+  ],
+  "fixture.kiosk.cellular": [
+   {
+    "file": "fixture.kiosk.cellular.png",
+    "w": 54,
+    "h": 74,
+    "base": 54
+   }
+  ],
+  "fixture.kiosk.shades": [
+   {
+    "file": "fixture.kiosk.shades.png",
+    "w": 47,
+    "h": 84,
+    "base": 47
+   }
+  ],
+  "fixture.kiosk.charmz": [
+   {
+    "file": "fixture.kiosk.charmz.png",
+    "w": 51,
+    "h": 66,
+    "base": 51
+   }
+  ],
+  "fixture.table": [
+   {
+    "file": "fixture.table.png",
+    "w": 56,
+    "h": 46,
+    "base": 56
+   }
+  ],
+  "fixture.table.boundaries": [
+   {
+    "file": "fixture.table.boundaries.png",
+    "w": 58,
+    "h": 43,
+    "base": 58
+   }
+  ],
+  "fixture.trash": [
+   {
+    "file": "fixture.trash.png",
+    "w": 24,
+    "h": 45,
+    "base": 24
+   }
+  ],
+  "fixture.cabinet": [
+   {
+    "file": "fixture.cabinet.png",
+    "w": 39,
+    "h": 75,
+    "base": 39
+   },
+   {
+    "file": "fixture.cabinet.1.png",
+    "w": 38,
+    "h": 74,
+    "base": 38
+   },
+   {
+    "file": "fixture.cabinet.2.png",
+    "w": 38,
+    "h": 76,
+    "base": 38
+   }
+  ],
+  "fixture.cabinet.ebgamez": [
+   {
+    "file": "fixture.cabinet.ebgamez.png",
+    "w": 36,
+    "h": 71,
+    "base": 36
+   }
+  ],
+  "fixture.ddr": [
+   {
+    "file": "fixture.ddr.png",
+    "w": 71,
+    "h": 87,
+    "base": 71
+   }
+  ],
+  "fixture.airhockey": [
+   {
+    "file": "fixture.airhockey.png",
+    "w": 56,
+    "h": 40,
+    "base": 56
+   }
+  ],
+  "fixture.prize": [
+   {
+    "file": "fixture.prize.png",
+    "w": 66,
+    "h": 66,
+    "base": 66
+   }
+  ],
+  "fixture.tokens": [
+   {
+    "file": "fixture.tokens.png",
+    "w": 24,
+    "h": 54,
+    "base": 24
+   }
+  ],
+  "fixture.rack": [
+   {
+    "file": "fixture.rack.png",
+    "w": 32,
+    "h": 42,
+    "base": 32
+   }
+  ],
+  "fixture.rack.hotspot": [
+   {
+    "file": "fixture.rack.hotspot.png",
+    "w": 40,
+    "h": 46,
+    "base": 40
+   }
+  ],
+  "fixture.rack.abercromp": [
+   {
+    "file": "fixture.rack.abercromp.png",
+    "w": 40,
+    "h": 44,
+    "base": 40
+   }
+  ],
+  "fixture.shelf": [
+   {
+    "file": "fixture.shelf.png",
+    "w": 36,
+    "h": 58,
+    "base": 36
+   }
+  ],
+  "fixture.shelf.radiohut": [
+   {
+    "file": "fixture.shelf.radiohut.png",
+    "w": 41,
+    "h": 61,
+    "base": 41
+   }
+  ],
+  "fixture.shelf.ebgamez": [
+   {
+    "file": "fixture.shelf.ebgamez.png",
+    "w": 39,
+    "h": 56,
+    "base": 39
+   }
+  ],
+  "fixture.shelf.spenceleys": [
+   {
+    "file": "fixture.shelf.spenceleys.png",
+    "w": 37,
+    "h": 62,
+    "base": 37
+   }
+  ],
+  "fixture.shelf.blockbusted": [
+   {
+    "file": "fixture.shelf.blockbusted.png",
+    "w": 43,
+    "h": 62,
+    "base": 43
+   }
+  ],
+  "fixture.shelf.bbw": [
+   {
+    "file": "fixture.shelf.bbw.png",
+    "w": 42,
+    "h": 56,
+    "base": 42
+   }
+  ],
+  "fixture.shelf.kbtoyz": [
+   {
+    "file": "fixture.shelf.kbtoyz.png",
+    "w": 40,
+    "h": 58,
+    "base": 40
+   }
+  ],
+  "fixture.shelf.maint": [
+   {
+    "file": "fixture.shelf.maint.png",
+    "w": 42,
+    "h": 60,
+    "base": 42
+   }
+  ],
+  "fixture.bookshelf": [
+   {
+    "file": "fixture.bookshelf.png",
+    "w": 36,
+    "h": 70,
+    "base": 36
+   }
+  ],
+  "fixture.counter": [
+   {
+    "file": "fixture.counter.png",
+    "w": 49,
+    "h": 42,
+    "base": 49
+   }
+  ],
+  "fixture.counter.wide": [
+   {
+    "file": "fixture.counter.wide.png",
+    "w": 70,
+    "h": 54,
+    "base": 70
+   }
+  ],
+  "fixture.counter.sbarrito": [
+   {
+    "file": "fixture.counter.sbarrito.png",
+    "w": 91,
+    "h": 81,
+    "base": 91
+   }
+  ],
+  "fixture.counter.teriyaki": [
+   {
+    "file": "fixture.counter.teriyaki.png",
+    "w": 85,
+    "h": 62,
+    "base": 85
+   }
+  ],
+  "fixture.counter.jubilee": [
+   {
+    "file": "fixture.counter.jubilee.png",
+    "w": 59,
+    "h": 59,
+    "base": 59
+   }
+  ],
+  "fixture.counter.cinnabomb": [
+   {
+    "file": "fixture.counter.cinnabomb.png",
+    "w": 71,
+    "h": 60,
+    "base": 71
+   }
+  ],
+  "fixture.cdbin": [
+   {
+    "file": "fixture.cdbin.png",
+    "w": 39,
+    "h": 38,
+    "base": 39
+   }
+  ],
+  "fixture.display.spenceleys": [
+   {
+    "file": "fixture.display.spenceleys.png",
+    "w": 56,
+    "h": 59,
+    "base": 56
+   }
+  ],
+  "fixture.display.abercromp": [
+   {
+    "file": "fixture.display.abercromp.png",
+    "w": 50,
+    "h": 56,
+    "base": 50
+   }
+  ],
+  "fixture.display.claire": [
+   {
+    "file": "fixture.display.claire.png",
+    "w": 32,
+    "h": 55,
+    "base": 32
+   }
+  ],
+  "fixture.display.bbw": [
+   {
+    "file": "fixture.display.bbw.png",
+    "w": 52,
+    "h": 55,
+    "base": 52
+   }
+  ],
+  "fixture.display": [
+   {
+    "file": "fixture.display.png",
+    "w": 42,
+    "h": 43,
+    "base": 42
+   }
+  ],
+  "fixture.case": [
+   {
+    "file": "fixture.case.png",
+    "w": 44,
+    "h": 46,
+    "base": 44
+   }
+  ],
+  "fixture.cage": [
+   {
+    "file": "fixture.cage.png",
+    "w": 38,
+    "h": 39,
+    "base": 38
+   },
+   {
+    "file": "fixture.cage.1.png",
+    "w": 37,
+    "h": 38,
+    "base": 37
+   }
+  ],
+  "fixture.toybin": [
+   {
+    "file": "fixture.toybin.png",
+    "w": 48,
+    "h": 43,
+    "base": 48
+   }
+  ],
+  "fixture.desk": [
+   {
+    "file": "fixture.desk.png",
+    "w": 39,
+    "h": 45,
+    "base": 39
+   }
+  ],
+  "fixture.monitors": [
+   {
+    "file": "fixture.monitors.png",
+    "w": 44,
+    "h": 52,
+    "base": 44
+   }
+  ],
+  "fixture.lostfound": [
+   {
+    "file": "fixture.lostfound.png",
+    "w": 40,
+    "h": 44,
+    "base": 40
+   }
+  ],
+  "fixture.dumpster": [
+   {
+    "file": "fixture.dumpster.png",
+    "w": 51,
+    "h": 51,
+    "base": 51
+   }
+  ],
+  "fixture.pallet": [
+   {
+    "file": "fixture.pallet.png",
+    "w": 52,
+    "h": 43,
+    "base": 52
+   }
+  ],
+  "fixture.ladder": [
+   {
+    "file": "fixture.ladder.png",
+    "w": 15,
+    "h": 74,
+    "base": 14
+   }
+  ],
+  "fixture.vending": [
+   {
+    "file": "fixture.vending.png",
+    "w": 36,
+    "h": 73,
+    "base": 36
+   }
+  ],
+  "fixture.payphone": [
+   {
+    "file": "fixture.payphone.png",
+    "w": 16,
+    "h": 59,
+    "base": 16
+   }
+  ],
+  "fixture.car": [
+   {
+    "file": "fixture.car.png",
+    "w": 66,
+    "h": 55,
+    "base": 66
+   },
+   {
+    "file": "fixture.car.1.png",
+    "w": 65,
+    "h": 51,
+    "base": 65
+   },
+   {
+    "file": "fixture.car.2.png",
+    "w": 64,
+    "h": 51,
+    "base": 64
+   }
+  ],
+  "fixture.lamppost": [
+   {
+    "file": "fixture.lamppost.png",
+    "w": 19,
+    "h": 91,
+    "base": 8
+   }
+  ],
+  "fixture.boxes": [
+   {
+    "file": "fixture.boxes.png",
+    "w": 29,
+    "h": 42,
+    "base": 29
+   }
+  ],
+  "fixture.oven": [
+   {
+    "file": "fixture.oven.png",
+    "w": 44,
+    "h": 46,
+    "base": 44
+   }
+  ],
+  "fixture.panel": [
+   {
+    "file": "fixture.panel.png",
+    "w": 22,
+    "h": 62,
+    "base": 22
+   }
+  ],
+  "fixture.boiler": [
+   {
+    "file": "fixture.boiler.png",
+    "w": 47,
+    "h": 74,
+    "base": 47
+   }
+  ],
+  "fixture.directory": [
+   {
+    "file": "fixture.directory.png",
+    "w": 27,
+    "h": 62,
+    "base": 27
+   }
+  ],
+  "fixture.servicedesk": [
+   {
+    "file": "fixture.servicedesk.png",
+    "w": 58,
+    "h": 46,
+    "base": 58
+   }
+  ],
+  "fixture.mopsink": [
+   {
+    "file": "fixture.mopsink.png",
+    "w": 41,
+    "h": 35,
+    "base": 41
+   }
+  ],
+  "fixture.vacant": [
+   {
+    "file": "fixture.vacant.png",
+    "w": 42,
+    "h": 36,
+    "base": 42
+   }
+  ],
+  "build.sleeping_bag": [
+   {
+    "file": "build.sleeping_bag.png",
+    "w": 46,
+    "h": 28,
+    "base": 46
+   },
+   {
+    "file": "build.sleeping_bag.1.png",
+    "w": 44,
+    "h": 26,
+    "base": 44
+   }
+  ],
+  "build.crate": [
+   {
+    "file": "build.crate.png",
+    "w": 36,
+    "h": 33,
+    "base": 36
+   }
+  ],
+  "build.cooler": [
+   {
+    "file": "build.cooler.png",
+    "w": 36,
+    "h": 34,
+    "base": 36
+   }
+  ],
+  "build.splice": [
+   {
+    "file": "build.splice.png",
+    "w": 40,
+    "h": 28,
+    "base": 40
+   }
+  ],
+  "build.lamp": [
+   {
+    "file": "build.lamp.png",
+    "w": 23,
+    "h": 44,
+    "base": 23
+   }
+  ],
+  "build.hot_plate": [
+   {
+    "file": "build.hot_plate.png",
+    "w": 27,
+    "h": 25,
+    "base": 27
+   }
+  ],
+  "build.futon": [
+   {
+    "file": "build.futon.png",
+    "w": 48,
+    "h": 36,
+    "base": 48
+   }
+  ],
+  "build.fridge": [
+   {
+    "file": "build.fridge.png",
+    "w": 28,
+    "h": 37,
+    "base": 28
+   }
+  ],
+  "build.foam": [
+   {
+    "file": "build.foam.png",
+    "w": 56,
+    "h": 32,
+    "base": 56
+   }
+  ],
+  "build.fan": [
+   {
+    "file": "build.fan.png",
+    "w": 19,
+    "h": 36,
+    "base": 19
+   }
+  ],
+  "build.tv": [
+   {
+    "file": "build.tv.png",
+    "w": 40,
+    "h": 43,
+    "base": 40
+   }
+  ],
+  "build.rope": [
+   {
+    "file": "build.rope.png",
+    "w": 57,
+    "h": 38,
+    "base": 57
+   }
+  ],
+  "build.lava_lamp": [
+   {
+    "file": "build.lava_lamp.png",
+    "w": 14,
+    "h": 42,
+    "base": 14
+   }
+  ],
+  "build.workbench": [
+   {
+    "file": "build.workbench.png",
+    "w": 40,
+    "h": 41,
+    "base": 40
+   }
+  ],
+  "build.pc": [
+   {
+    "file": "build.pc.png",
+    "w": 45,
+    "h": 41,
+    "base": 45
+   }
+  ],
+  "build.raccoon": [
+   {
+    "file": "build.raccoon.png",
+    "w": 23,
+    "h": 36,
+    "base": 23
+   }
+  ],
+  "build.periscope": [
+   {
+    "file": "build.periscope.png",
+    "w": 28,
+    "h": 49,
+    "base": 28
+   }
+  ],
+  "build.bunk": [
+   {
+    "file": "build.bunk.png",
+    "w": 48,
+    "h": 51,
+    "base": 48
+   }
+  ],
+  "build.xmas": [
+   {
+    "file": "build.xmas.png",
+    "w": 54,
+    "h": 44,
+    "base": 54
+   }
+  ],
+  "build.heater": [
+   {
+    "file": "build.heater.png",
+    "w": 24,
+    "h": 36,
+    "base": 24
+   }
+  ],
+  "build.scanner": [
+   {
+    "file": "build.scanner.png",
+    "w": 28,
+    "h": 28,
+    "base": 28
+   }
+  ],
+  "build.battery": [
+   {
+    "file": "build.battery.png",
+    "w": 46,
+    "h": 30,
+    "base": 46
+   }
+  ],
+  "build.pod": [
+   {
+    "file": "build.pod.png",
+    "w": 49,
+    "h": 46,
+    "base": 49
+   }
+  ],
+  "build.hammock": [
+   {
+    "file": "build.hammock.png",
+    "w": 48,
+    "h": 44,
+    "base": 48
+   }
+  ],
+  "build.arcade": [
+   {
+    "file": "build.arcade.png",
+    "w": 39,
+    "h": 78,
+    "base": 39
+   }
+  ],
+  "build.throne": [
+   {
+    "file": "build.throne.png",
+    "w": 35,
+    "h": 58,
+    "base": 35
+   }
+  ],
+  "build.ac": [
+   {
+    "file": "build.ac.png",
+    "w": 81,
+    "h": 90,
+    "base": 81
+   }
+  ]
+ },
+ "floors": {
+  "floor.tile": {
+   "file": "floor.tile.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    198,
+    202,
+    205
+   ]
+  },
+  "floor.terrazzo": {
+   "file": "floor.terrazzo.png",
+   "size": 32,
+   "tint": false,
+   "avg": [
+    243,
+    238,
+    227
+   ]
+  },
+  "floor.carpet": {
+   "file": "floor.carpet.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    139,
+    136,
+    142
+   ]
+  },
+  "floor.office": {
+   "file": "floor.office.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    173,
+    173,
+    175
+   ]
+  },
+  "floor.wood": {
+   "file": "floor.wood.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    208,
+    166,
+    116
+   ]
+  },
+  "floor.concrete": {
+   "file": "floor.concrete.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    173,
+    173,
+    174
+   ]
+  },
+  "floor.arcade": {
+   "file": "floor.arcade.png",
+   "size": 64,
+   "tint": false,
+   "avg": [
+    69,
+    42,
+    61
+   ]
+  },
+  "floor.luxe": {
+   "file": "floor.luxe.png",
+   "size": 32,
+   "tint": false,
+   "avg": [
+    231,
+    221,
+    206
+   ]
+  },
+  "floor.vacant": {
+   "file": "floor.vacant.png",
+   "size": 32,
+   "tint": false,
+   "avg": [
+    173,
+    162,
+    157
+   ]
+  },
+  "floor.ceiling": {
+   "file": "floor.ceiling.png",
+   "size": 32,
+   "tint": false,
+   "avg": [
+    171,
+    175,
+    180
+   ]
+  },
+  "floor.deck": {
+   "file": "floor.deck.png",
+   "size": 32,
+   "tint": false,
+   "avg": [
+    230,
+    190,
+    140
+   ]
+  }
+ },
+ "characters": {
+  "char.crew.drifter": {
+   "file": "char.crew.drifter.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.crew.mallrat": {
+   "file": "char.crew.mallrat.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.crew.goth": {
+   "file": "char.crew.goth.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.crew.searz": {
+   "file": "char.crew.searz.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.crew.skater": {
+   "file": "char.crew.skater.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 48
+  },
+  "char.crew.techie": {
+   "file": "char.crew.techie.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 48
+  },
+  "char.crew.theater": {
+   "file": "char.crew.theater.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.crew.kiosk": {
+   "file": "char.crew.kiosk.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.crew.grandma": {
+   "file": "char.crew.grandma.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.crew.runaway": {
+   "file": "char.crew.runaway.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 48
+  },
+  "char.crew.emo": {
+   "file": "char.crew.emo.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.crew.santa": {
+   "file": "char.crew.santa.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.crew.gary": {
+   "file": "char.crew.gary.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.npc.guard": {
+   "file": "char.npc.guard.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.npc.dayguard": {
+   "file": "char.npc.dayguard.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 0,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.npc.janitor": {
+   "file": "char.npc.janitor.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.npc.inspector": {
+   "file": "char.npc.inspector.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.npc.dog": {
+   "file": "char.npc.dog.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.shopper.teen": {
+   "file": "char.shopper.teen.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.shopper.dad": {
+   "file": "char.shopper.dad.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.shopper.mom": {
+   "file": "char.shopper.mom.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.shopper.prep": {
+   "file": "char.shopper.prep.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 48
+  },
+  "char.shopper.biz": {
+   "file": "char.shopper.biz.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.shopper.kid": {
+   "file": "char.shopper.kid.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  },
+  "char.shopper.senior": {
+   "file": "char.shopper.senior.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.shopper.scene": {
+   "file": "char.shopper.scene.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 46
+  }
+ }
+}

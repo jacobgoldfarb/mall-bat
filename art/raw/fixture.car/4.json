@@ -1,0 +1,12 @@
+{
+  "prompt": "early 2000s compact hatchback car, top view isometric, a dented bumper. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 176766841,
+  "width": 80,
+  "height": 64,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

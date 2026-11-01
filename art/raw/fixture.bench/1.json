@@ -1,0 +1,12 @@
+{
+  "prompt": "mall bench, dark wood slats on a black metal frame, pink gum stuck under the seat. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 395914135,
+  "width": 48,
+  "height": 40,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

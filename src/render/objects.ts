@@ -1,8 +1,9 @@
-import type { BuildId } from '../game/defs';
-import type { Fixture } from '../game/layout';
+import { BUILD, type BuildId } from '../game/defs';
+import { LAYOUT, type Fixture } from '../game/layout';
 import { hash2 } from '../game/rng';
 import { box, centeredBox, diamondPath, ellipse, faceQuad, isoText, rectBox, type Ctx } from './draw';
 import { isoX, isoY, rgba, shade } from './iso';
+import { drawPropSprite, hasProp } from './sprites';
 
 function cx(x: number, y: number) {
   return isoX(x + 0.5, y + 0.5);
@@ -19,11 +20,33 @@ function glowScreen(ctx: Ctx, x: number, y: number, z0: number, z1: number, inse
   ctx.restore();
 }
 
+const KIOSK_SPRITES: Record<string, string> = {
+  'CELL-U-LAR': 'fixture.kiosk.cellular',
+  'SHADES HUT': 'fixture.kiosk.shades',
+  'PHONE CHARMZ': 'fixture.kiosk.charmz',
+};
+
+function fixtureSprite(f: Fixture): string | null {
+  const room = f.room >= 0 ? LAYOUT.rooms[f.room] : null;
+  const options =
+    f.kind === 'kiosk'
+      ? [KIOSK_SPRITES[f.label ?? ''], 'fixture.kiosk.charmz']
+      : f.kind === 'counter'
+        ? [room?.kind === 'food' && `fixture.counter.${room.id}`, f.w > 1 ? 'fixture.counter.wide' : 'fixture.counter']
+        : [room && `fixture.${f.kind}.${room.id}`, `fixture.${f.kind}`];
+  return options.find((id): id is string => !!id && hasProp(id)) ?? null;
+}
+
 export function drawFixture(ctx: Ctx, f: Fixture, t: number, night: boolean, vacant: boolean) {
   const { x, y } = f;
   const r = hash2(x, y, f.seed);
   if (vacant && !['ladder', 'car', 'lamppost', 'boxes'].includes(f.kind)) {
-    if (r < 0.5) rectBox(ctx, x, y, 0.5, 0.5, 6, '#6a645a');
+    if (r < 0.5 && !drawPropSprite(ctx, 'fixture.vacant', x, y, { seed: f.seed })) rectBox(ctx, x, y, 0.5, 0.5, 6, '#6a645a');
+    return;
+  }
+  const sprite = fixtureSprite(f);
+  if (sprite && drawPropSprite(ctx, sprite, x, y, { w: f.w, d: f.d, seed: f.seed })) {
+    if (f.kind === 'servicedesk' && f.label) isoText(ctx, f.label, x + f.w / 2, y + 0.4, 46, 'x', 7, '#fff', { glow: f.color });
     return;
   }
   switch (f.kind) {
@@ -306,9 +329,69 @@ export function drawFixture(ctx: Ctx, f: Fixture, t: number, night: boolean, vac
   }
 }
 
+function steam(ctx: Ctx, x: number, y: number, t: number) {
+  for (let i = 0; i < 3; i++) {
+    const ph = (t * 0.05 + i / 3) % 1;
+    ctx.fillStyle = `rgba(230,230,230,${0.5 * (1 - ph)})`;
+    ctx.beginPath();
+    ctx.arc(cx(x, y) + Math.sin(ph * 6 + i) * 3, cy(x, y, 14 + ph * 20), 2 + ph * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function spliceSparks(ctx: Ctx, x: number, y: number, t: number) {
+  if (Math.sin(t * 1.7 + x * 5) <= 0.93) return;
+  ctx.fillStyle = '#fff6a0';
+  for (let i = 0; i < 4; i++) ctx.fillRect(cx(x, y) + (Math.random() - 0.5) * 8, cy(x, y, 8) + (Math.random() - 0.5) * 6, 1.5, 1.5);
+}
+
+function weldSparks(ctx: Ctx, x: number, y: number) {
+  ctx.fillStyle = '#fff6a0';
+  for (let i = 0; i < 6; i++) {
+    const a = Math.random() * Math.PI * 2;
+    ctx.fillRect(cx(x, y) + Math.cos(a) * Math.random() * 10, cy(x, y, 16) + Math.sin(a) * Math.random() * 6, 1.5, 1.5);
+  }
+}
+
+type Glow = (color: string, z: number, r?: number) => void;
+
+function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: number, powered: boolean, inUse: boolean, glow: Glow) {
+  switch (type) {
+    case 'splice':
+      if (powered) spliceSparks(ctx, x, y, t);
+      return;
+    case 'hot_plate':
+      if (powered && inUse) steam(ctx, x, y, t);
+      return;
+    case 'workbench':
+      if (inUse) {
+        weldSparks(ctx, x, y);
+        glow('#fff0b0', 16, 14);
+      }
+      return;
+    case 'tv':
+      if (inUse) glow('#7aaaff', 14, 18);
+      return;
+    case 'lamp':
+      return glow('#ffe0a0', 15, 10);
+    case 'lava_lamp':
+      return glow('#ff4fd0', 13, 12);
+    case 'pc':
+      return glow('#5aff8a', 8, 12);
+    case 'xmas':
+      return glow('#ff7a7a', 16, 14);
+    case 'heater':
+      return glow('#ff6a1a', 8, 12);
+    case 'arcade':
+      return glow('#ff2bd6', 30, 16);
+    case 'throne':
+      return glow('#ffd700', 24, 20);
+  }
+}
+
 export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: number, opts: { powered: boolean; inUse: boolean; alpha?: number }) {
   const { powered, inUse } = opts;
-  const glow = (c: string, z: number, r = 8) => {
+  const glow: Glow = (c, z, r = 8) => {
     if (!powered) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -319,6 +402,10 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
     ctx.fillRect(cx(x, y) - r, cy(x, y, z) - r, r * 2, r * 2);
     ctx.restore();
   };
+  if (type !== 'deck' && drawPropSprite(ctx, `build.${type}`, x, y, { seed: Math.floor(hash2(x, y) * 4), dim: !!BUILD[type].power && !powered })) {
+    buildableEffects(ctx, type, x, y, t, powered, inUse, glow);
+    return;
+  }
   switch (type) {
     case 'sleeping_bag': {
       const c = ['#3a6ac8', '#c84b3a', '#2f8f4e', '#a24bff'][Math.floor(hash2(x, y) * 4)];
@@ -344,10 +431,7 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
       ctx.moveTo(cx(x, y), cy(x, y, 6));
       ctx.bezierCurveTo(cx(x, y) + 10, cy(x, y, 12), cx(x, y) + 16, cy(x, y, -2), cx(x, y) + 20, cy(x, y, 2));
       ctx.stroke();
-      if (powered && Math.sin(t * 1.7 + x * 5) > 0.93) {
-        ctx.fillStyle = '#fff6a0';
-        for (let i = 0; i < 4; i++) ctx.fillRect(cx(x, y) + (Math.random() - 0.5) * 8, cy(x, y, 8) + (Math.random() - 0.5) * 6, 1.5, 1.5);
-      }
+      if (powered) spliceSparks(ctx, x, y, t);
       return;
     }
     case 'lamp':
@@ -360,13 +444,7 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
       ellipse(ctx, cx(x, y), cy(x, y, 5), 5, 2.5, powered ? (inUse ? '#ff4a1a' : '#6a2a1a') : '#333');
       if (inUse) {
         rectBox(ctx, x, y, 0.28, 0.28, 6, '#bbb', 5);
-        for (let i = 0; i < 3; i++) {
-          const ph = (t * 0.05 + i / 3) % 1;
-          ctx.fillStyle = `rgba(230,230,230,${0.5 * (1 - ph)})`;
-          ctx.beginPath();
-          ctx.arc(cx(x, y) + Math.sin(ph * 6 + i) * 3, cy(x, y, 14 + ph * 20), 2 + ph * 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        steam(ctx, x, y, t);
       }
       return;
     case 'futon':
@@ -452,11 +530,7 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
       rectBox(ctx, x - 0.2, y, 0.25, 0.2, 5, '#c84b3a', 12);
       rectBox(ctx, x + 0.2, y, 0.15, 0.3, 3, '#888', 12);
       if (inUse) {
-        ctx.fillStyle = '#fff6a0';
-        for (let i = 0; i < 6; i++) {
-          const a = Math.random() * Math.PI * 2;
-          ctx.fillRect(cx(x, y) + Math.cos(a) * Math.random() * 10, cy(x, y, 16) + Math.sin(a) * Math.random() * 6, 1.5, 1.5);
-        }
+        weldSparks(ctx, x, y);
         glow('#fff0b0', 16, 14);
       }
       return;

@@ -1,0 +1,12 @@
+{
+  "prompt": "video game store demo kiosk, black stand with a small crt tv and a wired controller, controller dangling on its cord. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 239236787,
+  "width": 48,
+  "height": 80,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

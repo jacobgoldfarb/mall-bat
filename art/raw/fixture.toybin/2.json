@@ -1,0 +1,12 @@
+{
+  "prompt": "toy store bin overflowing with plush toys and bouncy balls, a furby on top. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 949799606,
+  "width": 64,
+  "height": 48,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

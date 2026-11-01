@@ -1,0 +1,13 @@
+{
+  "prompt": "dark asphalt parking lot texture with gum spots and fine cracks. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 212761284,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

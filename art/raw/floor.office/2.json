@@ -1,0 +1,13 @@
+{
+  "prompt": "light gray commercial carpet tile square with faint seam. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 797838193,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

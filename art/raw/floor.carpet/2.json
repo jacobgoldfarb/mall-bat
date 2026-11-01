@@ -1,0 +1,13 @@
+{
+  "prompt": "light gray commercial low pile carpet with a subtle woven texture. top-down seamless floor texture, flat, no perspective, no objects, pixel art",
+  "seed": 15693004,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "lineless",
+    "shading": "basic shading",
+    "detail": "medium detail",
+    "view": "high top-down",
+    "isometric": false
+  }
+}

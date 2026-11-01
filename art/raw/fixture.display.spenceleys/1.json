@@ -1,0 +1,12 @@
+{
+  "prompt": "novelty store display table with glowing lava lamps and blacklight trinkets, a magic 8 ball. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text",
+  "seed": 575284855,
+  "width": 64,
+  "height": 64,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}
