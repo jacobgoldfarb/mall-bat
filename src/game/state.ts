@@ -1,0 +1,250 @@
+import type { BuildId, JobId, TraitId } from './defs';
+
+export interface Look {
+  skin: string;
+  hair: string;
+  hairStyle: number;
+  top: string;
+  bottom: string;
+  shoes: string;
+  hat?: string;
+  hatColor?: string;
+  build: number;
+}
+
+export interface Agent {
+  id: number;
+  x: number;
+  y: number;
+  layer: 0 | 1;
+  path: number[];
+  pathI: number;
+  goal: number;
+  facing: number;
+  look: Look;
+  moving: boolean;
+  climb: number;
+  bubble?: { text: string; until: number; tone?: 'alert' | 'info' | 'happy' };
+}
+
+export type CrewState =
+  | 'idle'
+  | 'toWork'
+  | 'working'
+  | 'toHome'
+  | 'sleeping'
+  | 'eating'
+  | 'toEat'
+  | 'leisure'
+  | 'toLeisure'
+  | 'toBed'
+  | 'fleeing'
+  | 'evacuating'
+  | 'away';
+
+export interface Carry {
+  cash: number;
+  food: number;
+  parts: number;
+  goods: number;
+}
+
+export interface Crew extends Agent {
+  name: string;
+  archetype: string;
+  title: string;
+  bio: string;
+  stealth: number;
+  charm: number;
+  handy: number;
+  traits: TraitId[];
+  energy: number;
+  hunger: number;
+  morale: number;
+  familiarity: number;
+  dayJob: JobId;
+  nightJob: JobId;
+  state: CrewState;
+  timer: number;
+  workTimer: number;
+  useObj: number;
+  carrying: Carry;
+  detect: number;
+  bedId: number;
+  bannedUntil: number;
+  awayUntil: number;
+  miserable: number;
+  joinedDay: number;
+  earned: number;
+  thought: string;
+  hotMeal: boolean;
+  spottedBy: number;
+  waitUntil: number;
+  recall: boolean;
+  hiding: boolean;
+  camWait: number;
+}
+
+export type NpcKind = 'shopper' | 'guard' | 'dayguard' | 'janitor' | 'inspector';
+
+export interface Npc extends Agent {
+  kind: NpcKind;
+  name: string;
+  state: string;
+  timer: number;
+  route: number;
+  routeI: number;
+  speed: number;
+  dests: number[];
+  chaseId: number;
+  lastSeen: { x: number; y: number; t: number };
+  dog: boolean;
+  inspectionId: number;
+  isGary: boolean;
+  hearCooldown: number;
+}
+
+export interface Placed {
+  id: number;
+  type: BuildId;
+  x: number;
+  y: number;
+  powered: boolean;
+  tapRoom: number;
+  usedUntil: number;
+  supplyLoad: number;
+}
+
+export type InspectionKind = 'complaint' | 'power' | 'pest' | 'fire' | 'sweep';
+
+export interface Inspection {
+  id: number;
+  room: number;
+  x: number;
+  y: number;
+  radius: number;
+  kind: InspectionKind;
+  at: number;
+  state: 'scheduled' | 'walking' | 'climbing' | 'done';
+  npcId: number;
+  reason: string;
+}
+
+export interface RoomState {
+  complaint: number;
+  power: number;
+  vacant: boolean;
+  popup: boolean;
+  hotX: number;
+  hotY: number;
+  hotW: number;
+  lastWarn: number;
+}
+
+export type LogKind = 'pa' | 'info' | 'good' | 'bad' | 'warn' | 'phone';
+
+export interface LogEntry {
+  id: number;
+  t: number;
+  text: string;
+  kind: LogKind;
+  from?: string;
+  focus?: { x: number; y: number; layer: 0 | 1 };
+}
+
+export interface Choice {
+  label: string;
+  action: string;
+  hint?: string;
+  disabled?: string;
+}
+
+export interface Modal {
+  id: number;
+  title: string;
+  body: string;
+  art?: string;
+  choices: Choice[];
+  data?: Record<string, unknown>;
+}
+
+export interface Candidate {
+  name: string;
+  archetype: string;
+  stealth: number;
+  charm: number;
+  handy: number;
+  traits: TraitId[];
+  bio: string;
+  look: Look;
+}
+
+export interface Camera {
+  x: number;
+  y: number;
+  angle: number;
+  sweep: number;
+  phase: number;
+  active: boolean;
+  cooldown: number;
+}
+
+export interface GameStats {
+  caught: number;
+  spotted: number;
+  inspections: number;
+  inspectionsFoundNothing: number;
+  raccoons: number;
+  ebaySold: number;
+  fountainCash: number;
+  goodsCrafted: number;
+  nightsClean: number;
+  bestNightStreak: number;
+  peakCrew: number;
+  storesClosed: number;
+}
+
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
+export interface GameState {
+  version: number;
+  seed: number;
+  rng: number;
+  time: number;
+  difficulty: Difficulty;
+  playerName: string;
+  cash: number;
+  food: number;
+  parts: number;
+  goods: number;
+  totalEarned: number;
+  alert: number;
+  mallHealth: number;
+  deck: number[];
+  objects: Placed[];
+  crew: Crew[];
+  npcs: Npc[];
+  cameras: Camera[];
+  inspections: Inspection[];
+  rooms: RoomState[];
+  pools: Record<string, number>;
+  smell: number[];
+  log: LogEntry[];
+  modals: Modal[];
+  flags: Record<string, number>;
+  gary: { affinity: number; recruited: boolean; insider: boolean; gifts: number; replaced: boolean };
+  business: { kiosk: boolean; popupRoom: number };
+  objective: number;
+  stats: GameStats;
+  achievements: string[];
+  nextId: number;
+  candidate: Candidate | null;
+  ebayTimer: number;
+  lastDay: number;
+  lastHour: number;
+  dailyIncome: number[];
+  todayIncome: number;
+  todayBlackFriday: number;
+  spottedTonight: boolean;
+  over: { won: boolean; title: string; text: string } | null;
+}
