@@ -1,5 +1,6 @@
 import { newGame } from '../src/game/create';
 import { resolveModal } from '../src/game/events';
+import { forecastInspection } from '../src/game/inspect';
 import { LAYOUT } from '../src/game/layout';
 import { auctionBid, rankOf } from '../src/game/ops';
 import { buyFood, demolishAt, leaseKiosk, openPopup, placeObject, tick } from '../src/game/sim';
@@ -66,14 +67,12 @@ function reactToInspections() {
   for (const ins of s.inspections) {
     if (ins.state !== 'scheduled') continue;
     const inZone = (x: number, y: number) => Math.max(Math.abs(x - ins.x), Math.abs(y - ins.y)) <= ins.radius;
-    if (s.objects.some((o) => o.type === 'raccoon' && inZone(o.x, o.y))) continue;
-    const victims = s.objects.filter((o) => inZone(o.x, o.y));
-    if (!victims.length) continue;
-    if (rankOf(s) >= 2 && s.cash >= 45) {
+    if (!forecastInspection(s, ins).confiscated.length) continue;
+    if (rankOf(s) >= 2 && s.cash >= 45 && !s.objects.some((o) => o.type === 'raccoon' && inZone(o.x, o.y))) {
       for (let y = ins.y - 1; y <= ins.y + 1; y++) for (let x = ins.x - 1; x <= ins.x + 1; x++) if (!s.objects.some((o) => o.type === 'raccoon' && inZone(o.x, o.y)) && s.deck[y * 48 + x] && !d.objAt.has(y * 48 + x)) placeObject(s, 'raccoon', x, y);
-      if (s.objects.some((o) => o.type === 'raccoon' && inZone(o.x, o.y))) continue;
     }
-    for (const o of victims) demolishAt(s, o.x, o.y);
+    const f = forecastInspection(s, ins);
+    for (const o of f.confiscated) demolishAt(s, o.x, o.y);
   }
 }
 
@@ -95,12 +94,11 @@ function manage() {
     if (vacant >= 0) openPopup(s, vacant);
   }
   s.crew.forEach((c, i) => {
-    c.nightJob = nightJobs[i % nightJobs.length];
-    c.dayJob = dayJobs[i % dayJobs.length];
-    if (c.dayJob === 'kiosk' && !s.business.kiosk) c.dayJob = 'busk';
-    if (c.dayJob === 'popup' && s.business.popupRoom < 0) c.dayJob = s.business.kiosk ? 'kiosk' : 'tinker';
-    if (c.dayJob === 'tinker' && !getDerived(s).workbenches.length) c.dayJob = 'samples';
-    if (i % 3 === 2) c.dayJob = c.energy < 50 ? 'rest' : c.dayJob;
+    const night = nightJobs[i % nightJobs.length];
+    const day = dayJobs[i % dayJobs.length];
+    c.nightJob = night;
+    c.dayJob = i % 3 === 2 && c.energy < 50 ? 'rest' : day;
+    c.fillIn = true;
   });
 }
 
@@ -128,5 +126,5 @@ while (!s.over) {
 console.log('OVER:', s.over.title, `cash=$${s.cash.toFixed(0)} bid=$${auctionBid(s)} day=${dayOf(s.time)}`);
 console.log('stats', s.stats);
 console.log('complaints', s.rooms.map((r, i) => [LAYOUT.rooms[i].id, Math.round(r.complaint)]).filter((x) => (x[1] as number) > 5));
-console.log('morale', s.crew.map((c) => `${c.name}:${c.morale.toFixed(0)} fam${c.familiarity.toFixed(0)}`).join(' '));
+console.log('mood', s.mood.toFixed(0), 'missedMeals', s.missedMeals, s.crew.map((c) => `${c.name}: fam${c.familiarity.toFixed(0)}`).join(' '));
 if (verbose) for (const l of s.log.slice(-60)) console.log(`  [${l.kind}] ${l.text}`);

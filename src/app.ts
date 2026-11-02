@@ -1,6 +1,6 @@
-import type { BuildCategory, BuildId } from './game/defs';
+import { BUILD, type BuildCategory, type BuildId } from './game/defs';
 import type { GameState } from './game/state';
-import type { Renderer, ViewState } from './render/renderer';
+import type { Overlay, Renderer, ViewState } from './render/renderer';
 
 export type Screen = 'title' | 'game';
 
@@ -18,7 +18,9 @@ export interface AppState {
   view: ViewState;
   speed: number;
   paused: boolean;
-  menu: 'none' | 'pause' | 'settings' | 'help' | 'newgame';
+  menu: 'none' | 'pause' | 'settings' | 'help' | 'newgame' | 'jobs';
+  jobsCrew: number | null;
+  jobsShift: 'day' | 'night';
   buildCategory: BuildCategory | 'business';
   buildOpen: boolean;
   selectedObj: number | null;
@@ -28,6 +30,7 @@ export interface AppState {
   tick: number;
   logOpen: boolean;
   objectiveOpen: boolean;
+  inspectionsOpen: boolean;
   crewExpanded: number | null;
   autoPause: boolean;
   uiScale: number;
@@ -46,10 +49,13 @@ export const app: AppState = {
     dragStart: null,
     selectedCrew: null,
     xray: false,
+    flip: false,
   },
   speed: 1,
   paused: false,
   menu: 'none',
+  jobsCrew: null,
+  jobsShift: 'day',
   buildCategory: 'structure',
   buildOpen: true,
   selectedObj: null,
@@ -59,6 +65,7 @@ export const app: AppState = {
   tick: 0,
   logOpen: true,
   objectiveOpen: true,
+  inspectionsOpen: false,
   crewExpanded: null,
   autoPause: localStorage.getItem('dropceiling.autopause') !== '0',
   uiScale: 1,
@@ -83,7 +90,27 @@ export function toast(text: string, tone: Toast['tone'] = 'info', ms = 2600) {
   refresh();
 }
 
+let overlayBeforePowerFocus: Overlay | null = null;
+
+export function focusPowerFor(type: BuildId | null) {
+  const def = type && BUILD[type];
+  const powered = !!def && (def.category === 'power' || !!def.power || !!def.supply);
+  if (powered && app.view.overlay !== 'power') {
+    overlayBeforePowerFocus = app.view.overlay;
+    app.view.overlay = 'power';
+  } else if (!powered && overlayBeforePowerFocus !== null) {
+    app.view.overlay = overlayBeforePowerFocus;
+    overlayBeforePowerFocus = null;
+  }
+}
+
+export function selectObject(id: number | null) {
+  app.selectedObj = id;
+  focusPowerFor(id === null ? null : (app.state?.objects.find((o) => o.id === id)?.type ?? null));
+}
+
 export function selectBuild(id: BuildId | null) {
+  focusPowerFor(id);
   app.view.build = id;
   app.view.demolish = false;
   app.view.dragStart = null;

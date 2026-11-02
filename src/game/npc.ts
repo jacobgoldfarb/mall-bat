@@ -405,7 +405,7 @@ export function detection(s: GameState, dt: number) {
     if (!blackout) {
       s.cameras.forEach((cam, ci) => {
         if (!cam.active) return;
-        const vis = seesCrew(cam.x, cam.y, cameraAngle(cam, s.time), CAMERA_FOV, CAMERA_RANGE, c);
+        const vis = coneSees(cam.x, cam.y, cameraAngle(cam, s.time), CAMERA_FOV, CAMERA_RANGE, c.x, c.y, 0);
         if (vis) {
           rate += 0.55 * vis * stealthMod;
           cameraHit = ci;

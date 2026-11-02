@@ -724,6 +724,70 @@
     "base": 35
    }
   ],
+  "build.siphon": [
+   {
+    "file": "build.siphon.png",
+    "w": 24,
+    "h": 35,
+    "base": 24
+   }
+  ],
+  "build.asbestos": [
+   {
+    "file": "build.asbestos.png",
+    "w": 21,
+    "h": 44,
+    "base": 21
+   }
+  ],
+  "build.sleeping_bag.sleeper": [
+   {
+    "file": "build.sleeping_bag.sleeper.png",
+    "w": 44,
+    "h": 27,
+    "base": 44
+   }
+  ],
+  "build.futon.sleeper": [
+   {
+    "file": "build.futon.sleeper.png",
+    "w": 56,
+    "h": 36,
+    "base": 56
+   }
+  ],
+  "build.bunk.sleeper": [
+   {
+    "file": "build.bunk.sleeper.png",
+    "w": 47,
+    "h": 53,
+    "base": 47
+   }
+  ],
+  "build.bunk.sleeper2": [
+   {
+    "file": "build.bunk.sleeper2.png",
+    "w": 48,
+    "h": 54,
+    "base": 48
+   }
+  ],
+  "build.hammock.sleeper": [
+   {
+    "file": "build.hammock.sleeper.png",
+    "w": 42,
+    "h": 44,
+    "base": 42
+   }
+  ],
+  "build.floor_sleeper": [
+   {
+    "file": "build.floor_sleeper.png",
+    "w": 44,
+    "h": 26,
+    "base": 44
+   }
+  ],
   "build.ac": [
    {
     "file": "build.ac.png",
@@ -772,6 +836,16 @@
     173,
     173,
     175
+   ]
+  },
+  "floor.black": {
+   "file": "floor.black.png",
+   "size": 32,
+   "tint": true,
+   "avg": [
+    57,
+    59,
+    72
    ]
   },
   "floor.wood": {

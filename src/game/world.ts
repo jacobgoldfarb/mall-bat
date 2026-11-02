@@ -37,6 +37,7 @@ export interface Derived {
   fridge: boolean;
   supplyTotal: number;
   demandTotal: number;
+  signs: Placed[];
   version: number;
 }
 
@@ -96,6 +97,7 @@ function computeDerived(s: GameState): Derived {
     fridge: false,
     supplyTotal: 0,
     demandTotal: 0,
+    signs: [],
     version: ++version,
   };
 
@@ -174,6 +176,7 @@ function computeDerived(s: GameState): Derived {
       for (let y = o.y - 6; y <= o.y + 6; y++)
         for (let x = o.x - 6; x <= o.x + 6; x++) if (inBounds(x, y) && Math.hypot(x - o.x, y - o.y) <= 6) periscopeAt[idx(x, y)] = 1;
     }
+    if (def.deterRadius) d.signs.push(o);
   }
   return d;
 }
@@ -183,6 +186,8 @@ function isColdNow(s: GameState) {
   const date = new Date(2004, 9, 1 + day);
   return date.getMonth() === 11 || (date.getMonth() === 10 && date.getDate() >= 20);
 }
+
+export const SKIMMABLE = ['store', 'food', 'foodcourt'];
 
 export function canPlace(s: GameState, type: BuildId, x: number, y: number): string | null {
   if (!inBounds(x, y)) return 'Out of bounds';
@@ -212,6 +217,11 @@ export function canPlace(s: GameState, type: BuildId, x: number, y: number): str
   if (type === 'splice') {
     const ri = LAYOUT.roomAt[i];
     if (!storeHasPower(s, ri)) return 'This store is vacant. The power is cut.';
+  }
+  if (def.racket) {
+    const ri = LAYOUT.roomAt[i];
+    if (!SKIMMABLE.includes(LAYOUT.rooms[ri].kind) || s.rooms[ri].vacant || s.rooms[ri].popup) return 'Needs an open store or restaurant below';
+    if (s.objects.some((o) => o.type === type && LAYOUT.roomAt[idx(o.x, o.y)] === ri)) return 'This store already has a siphon';
   }
   if (type === 'rope') {
     const fi = LAYOUT.fixtureAt[i];
@@ -414,37 +424,73 @@ function sightEdge(ax: number, ay: number, bx: number, by: number): boolean {
   return e === E_OPEN || e === E_GATE || e === E_GLASS || e === E_PUBLIC;
 }
 
-export function lineOfSight(ax: number, ay: number, bx: number, by: number): boolean {
-  const dist = Math.hypot(bx - ax, by - ay);
-  const steps = Math.max(1, Math.ceil(dist * 4));
-  let px = Math.floor(ax);
-  let py = Math.floor(ay);
-  for (let k = 1; k <= steps; k++) {
-    const t = k / steps;
-    const tx = Math.floor(ax + (bx - ax) * t);
-    const ty = Math.floor(ay + (by - ay) * t);
-    if (tx === px && ty === py) continue;
-    if (tx !== px && ty !== py) {
-      if (!(sightEdge(px, py, tx, py) && sightEdge(tx, py, tx, ty)) && !(sightEdge(px, py, px, ty) && sightEdge(px, ty, tx, ty))) return false;
-    } else if (!sightEdge(px, py, tx, ty)) return false;
-    const fi = LAYOUT.fixtureAt[idx(tx, ty)];
-    if (fi >= 0 && TALL.has(LAYOUT.fixtures[fi].kind) && !(tx === Math.floor(bx) && ty === Math.floor(by))) return false;
-    px = tx;
-    py = ty;
+function blocksSight(x: number, y: number): boolean {
+  const fi = LAYOUT.fixtureAt[idx(x, y)];
+  return fi >= 0 && TALL.has(LAYOUT.fixtures[fi].kind);
+}
+
+export function sightFraction(ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  let x = Math.floor(ax);
+  let y = Math.floor(ay);
+  const ex = Math.floor(bx);
+  const ey = Math.floor(by);
+  const stepX = dx > 0 ? 1 : -1;
+  const stepY = dy > 0 ? 1 : -1;
+  const deltaX = dx !== 0 ? Math.abs(1 / dx) : Infinity;
+  const deltaY = dy !== 0 ? Math.abs(1 / dy) : Infinity;
+  let nextX = dx !== 0 ? (dx > 0 ? x + 1 - ax : ax - x) * deltaX : Infinity;
+  let nextY = dy !== 0 ? (dy > 0 ? y + 1 - ay : ay - y) * deltaY : Infinity;
+  for (let guard = 0; guard < W + H && (x !== ex || y !== ey); guard++) {
+    const corner = Math.abs(nextX - nextY) < 1e-9;
+    const t = Math.min(nextX, nextY);
+    if (t > 1) return 1;
+    const nx = corner || nextX < nextY ? x + stepX : x;
+    const ny = corner || nextY < nextX ? y + stepY : y;
+    if (!inBounds(nx, ny)) return t;
+    const open = corner
+      ? (sightEdge(x, y, nx, y) && sightEdge(nx, y, nx, ny)) || (sightEdge(x, y, x, ny) && sightEdge(x, ny, nx, ny))
+      : sightEdge(x, y, nx, ny);
+    if (!open) return t;
+    if (nx !== x) nextX += deltaX;
+    if (ny !== y) nextY += deltaY;
+    x = nx;
+    y = ny;
+    if (blocksSight(x, y) && (x !== ex || y !== ey)) return t;
   }
-  return true;
+  return 1;
+}
+
+export function lineOfSight(ax: number, ay: number, bx: number, by: number): boolean {
+  return sightFraction(ax, ay, bx, by) >= 1;
+}
+
+export function sightPolygon(x: number, y: number, facing: number, fov: number, range: number): { x: number; y: number }[] {
+  const rays = Math.max(16, Math.ceil(fov * range * 8));
+  const points = [{ x, y }];
+  for (let k = 0; k <= rays; k++) {
+    const a = facing - fov / 2 + (fov * k) / rays;
+    const tx = x + Math.cos(a) * range;
+    const ty = y + Math.sin(a) * range;
+    const f = sightFraction(x, y, tx, ty);
+    points.push({ x: x + (tx - x) * f, y: y + (ty - y) * f });
+  }
+  return points;
 }
 
 export function cameraAngle(c: { angle: number; sweep: number; phase: number }, t: number) {
   return c.angle + Math.sin(t * 0.35 + c.phase) * c.sweep;
 }
 
-export function coneSees(nx: number, ny: number, facing: number, fov: number, range: number, x: number, y: number): number {
+export const GUARD_NEAR_FIELD = 0.9;
+
+export function coneSees(nx: number, ny: number, facing: number, fov: number, range: number, x: number, y: number, nearField = GUARD_NEAR_FIELD): number {
   const dx = x - nx;
   const dy = y - ny;
   const d = Math.hypot(dx, dy);
   if (d > range) return 0;
-  if (d > 0.9) {
+  if (d > nearField) {
     let diff = Math.atan2(dy, dx) - facing;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     if (Math.abs(diff) > fov / 2) return 0;
@@ -458,10 +504,10 @@ export const CAMERA_RANGE = 7;
 
 export function cameraWatching(s: GameState, x: number, y: number): boolean {
   if ((s.flags.blackoutUntil ?? 0) > s.time) return false;
-  return s.cameras.some((c) => c.active && coneSees(c.x, c.y, cameraAngle(c, s.time), CAMERA_FOV + 0.15, CAMERA_RANGE + 0.5, x, y) > 0);
+  return s.cameras.some((c) => c.active && coneSees(c.x, c.y, cameraAngle(c, s.time), CAMERA_FOV + 0.15, CAMERA_RANGE + 0.5, x, y, 0) > 0);
 }
 
-const TALL = new Set(['fountain', 'palm', 'shelf', 'bookshelf', 'rack', 'cabinet', 'vending', 'boxes', 'panel', 'boiler', 'kiosk', 'dumpster', 'prize']);
+const TALL = new Set(['fountain', 'palm', 'shelf', 'bookshelf', 'rack', 'cabinet', 'vending', 'boxes', 'panel', 'boiler', 'kiosk', 'dumpster', 'prize', 'ddr', 'cage', 'directory', 'car', 'oven', 'lostfound']);
 
 export function roomTiles(ri: number): number[] {
   const r = LAYOUT.rooms[ri];

@@ -1,18 +1,23 @@
-import { app, focusTile, refresh, selectBuild, SPEEDS, toast } from '../app';
+import { app, focusTile, refresh, selectBuild, selectObject, SPEEDS, toast } from '../app';
 import { audio } from '../audio/audio';
-import { currentJob, jobBlocked, recallCrew } from '../game/crew';
-import { ALERT_LEVELS, BUILD, BUILDS, JOB, JOBS, RANKS, TRAITS, type BuildCategory, type JobId } from '../game/defs';
+import { currentJob, jobUnavailable, recallCrew, shiftNow } from '../game/crew';
+import { ALERT_LEVELS, BUILD, BUILDS, JOB, RANKS, TRAITS, canRotate, type BuildCategory } from '../game/defs';
 import { resolveModal } from '../game/events';
+import { forecastInspection, forecastLabel, type InspectionForecast } from '../game/inspect';
 import { LAYOUT, C_DUCT, C_AC, C_SKYLIGHT, C_NONE, idx, inBounds } from '../game/layout';
+import { FOOD_PRICE, LOW_MOOD, daysOfFood, mealNeed, moodTarget } from '../game/needs';
 import { OBJECTIVES, objectiveProgress } from '../game/objectives';
-import { ACHIEVEMENTS, alertLevel, auctionBid, rankOf } from '../game/ops';
-import { FOOD_PRICE, KIOSK_COST, POPUP_COST, POWER_MULT, buyFood, demolishAt, leaseKiosk, noiseField, openPopup, popupName } from '../game/sim';
-import type { Crew, GameState } from '../game/state';
+import { ACHIEVEMENTS, CLEAN_NIGHT_DECAY, alertDecay, alertLevel, auctionBid, rankOf } from '../game/ops';
+import { KIOSK_COST, POPUP_COST, POWER_MULT, buyFood, clearJam, demolishAt, leaseKiosk, noiseField, openPopup, popupName, rotateObject } from '../game/sim';
+import type { Crew, GameState, Inspection, InspectionKind, Placed } from '../game/state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate, phaseAt, phaseLabel } from '../game/time';
 import { boundariesSignal, getDerived } from '../game/world';
 import { crewSprite } from '../render/renderer';
 import { Icon } from './icons';
+import { Delta } from './delta';
+import { openJobs } from './jobs';
 import { Bar, BuildIcon, Dots, Portrait } from './widgets';
+import { peakHeat, rampGradient, type HeatKind } from '../render/heat';
 
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
 
@@ -29,7 +34,7 @@ export function TopBar({ s }: { s: GameState }) {
   return (
     <div class="topbar panel">
       <div class="logo" onClick={() => ((app.menu = 'pause'), refresh())}>
-        DROP<span>CEILING</span>
+        MALL<span>BATS</span>
       </div>
       <div class="clock">
         <div class="clock-top">
@@ -56,25 +61,31 @@ export function TopBar({ s }: { s: GameState }) {
           <Icon name="cash" />
           <div>
             <b>{money(s.cash)}</b>
+            <Delta value={s.cash} scope={s} format={money} />
             <small>{s.todayIncome > 0 ? `+${money(s.todayIncome)} TODAY` : 'CASH'}</small>
           </div>
         </div>
-        <Resource vital icon="food" label="Food" value={s.food} cap={d.foodCap} title={d.fridge ? 'Fridge keeps it fresh.' : 'Spoils 8%/day without a powered Mini-Fridge.'} />
-        <Resource icon="parts" label="Parts" value={s.parts} cap={d.partsCap} title="Tinker 2 parts into 1 good." />
-        <Resource icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Sell on eBay, at the kiosk, the pop-up, or return them at Searz." />
+        <FoodStat s={s} cap={d.foodCap} fridge={!!d.fridge} />
+        <Resource scope={s} icon="parts" label="Parts" value={s.parts} cap={d.partsCap} title="Building electronics and gear costs parts. Leftovers can be tinkered into goods (2 parts → 1 good)." />
+        <Resource scope={s} icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Sell on eBay, at the kiosk, the pop-up, or return them at Searz." />
+        <MoodStat s={s} />
       </div>
       <div class="divider" />
-      <div class="meter rank" title={next ? `Next rank at ${money(next.earned)} total earned` : 'Max rank'}>
+      <div class="meter rank" title={rankTitle(s, rank)}>
         <Icon name="rank" />
         <div style={{ flex: 1 }}>
           <div class="meter-head">
             <b>{RANKS[rank].name}</b>
           </div>
           {next ? <Bar value={((s.totalEarned - RANKS[rank].earned) / (next.earned - RANKS[rank].earned)) * 100} color="#dc348c" /> : <span class="label">MAX RANK</span>}
-          {next && <span class="label">NEXT · {next.name.toUpperCase()}</span>}
+          {next && (
+            <span class="label">
+              {money(s.totalEarned)} / {money(next.earned)} EARNED
+            </span>
+          )}
         </div>
       </div>
-      <div class={`meter alert lvl${lvl}`} title={`${ALERT_LEVELS[lvl].name}: ${ALERT_LEVELS[lvl].desc}\nAt 100%, they sweep the ceiling and you're evicted.`}>
+      <div class={`meter alert lvl${lvl}`} title={alertTitle(s, lvl)}>
         <Icon name="alert" />
         <div style={{ flex: 1 }}>
           <div class="meter-head">
@@ -89,6 +100,9 @@ export function TopBar({ s }: { s: GameState }) {
             ))}
             <div class="alert-fill" style={{ width: `${s.alert}%` }} />
           </div>
+          <span class="label">
+            COOLS −{Math.round(alertDecay(s, !s.spottedTonight))}/DAY{s.spottedTonight ? ' · SPOTTED TONIGHT' : ''}
+          </span>
         </div>
       </div>
       <div class="meter auction" title="The mall goes to auction at noon on New Year's Eve. Every store that closes lowers the developer's bid.">
@@ -108,13 +122,74 @@ export function TopBar({ s }: { s: GameState }) {
   );
 }
 
-function Resource({ icon, label, value, cap, title, vital }: { icon: string; label: string; value: number; cap: number; title: string; vital?: boolean }) {
+function rankTitle(s: GameState, rank: number): string {
+  const next = RANKS[rank + 1];
+  const lines = ['Rank comes from lifetime earnings: every dollar the Bats bring in counts, even after you spend it.'];
+  if (next) lines.push(`${next.name} at ${money(next.earned)} earned (${money(next.earned - s.totalEarned)} to go). Each rank unlocks new builds and jobs.`);
+  else lines.push('Max rank.');
+  return lines.join('\n');
+}
+
+function alertTitle(s: GameState, lvl: number): string {
+  const clean = alertDecay(s, true);
+  return [
+    `Alert: how suspicious mall management is of the whole mall. ${ALERT_LEVELS[lvl].name}: ${ALERT_LEVELS[lvl].desc}`,
+    `Cools every morning at 6 AM: −${Math.round(clean)} after a clean night (nobody spotted), −${Math.round(clean - CLEAN_NIGHT_DECAY)} if someone was seen.`,
+    'Rises when Bats are spotted or caught, stores notice missing stock, or an inspection finds your stuff.',
+    'At 100%, they sweep the ceiling and the Bats are evicted. Game over.',
+    'Separate from this, each Bat has their own recognition by Officer Dana (crew card), which only affects day jobs.',
+  ].join('\n');
+}
+
+function FoodStat({ s, cap, fridge }: { s: GameState; cap: number; fridge: boolean }) {
+  const days = daysOfFood(s);
+  const hungry = s.missedMeals > 0;
+  const title = [
+    `Food (cap ${cap}). The Bats eat together at 8 AM and 8 PM: ${mealNeed(s)} portions per meal.`,
+    `If the stash runs short, someone buys slices at $${FOOD_PRICE} each. With no cash either, the Bats go hungry: they tire faster, work slower, and mood drops.`,
+    fridge ? 'Fridge keeps it fresh.' : 'Spoils 8%/day without a powered Mini-Fridge.',
+  ].join('\n');
+  return (
+    <div class={`stat ${hungry ? 'empty' : s.food >= cap ? 'full' : ''}`} title={title}>
+      <Icon name="food" />
+      <div>
+        <b>{Math.floor(s.food)}</b>
+        <Delta value={s.food} scope={s} />
+        <small>{hungry ? 'HUNGRY' : days === Infinity ? `FOOD /${cap}` : `${days < 10 ? days.toFixed(1) : Math.floor(days)} DAYS`}</small>
+      </div>
+    </div>
+  );
+}
+
+function MoodStat({ s }: { s: GameState }) {
+  const target = moodTarget(s);
+  const low = s.mood < LOW_MOOD;
+  const title = [
+    `Mood ${Math.round(s.mood)}, drifting toward ${Math.round(target)}. Shared by the whole crew.`,
+    'Up: comfort items, beds for everyone, hot meals, leisure, reading at Boundaries, Jolly Bats.',
+    'Down: missed meals, Bats without beds, exhaustion, overcrowding, December cold without a heater.',
+    `Below ${LOW_MOOD}, everyone works 30% slower. If it stays miserable for days, someone leaves.`,
+  ].join('\n');
+  return (
+    <div class={`stat ${low ? 'empty' : ''}`} title={title}>
+      <Icon name="leisure" />
+      <div>
+        <b>{Math.round(s.mood)}</b>
+        <Delta value={Math.round(s.mood)} scope={s} min={2} />
+        <small>MOOD {target > s.mood + 2 ? '▲' : target < s.mood - 2 ? '▼' : ''}</small>
+      </div>
+    </div>
+  );
+}
+
+function Resource({ icon, label, value, cap, title, vital, scope }: { icon: string; label: string; value: number; cap: number; title: string; vital?: boolean; scope: object }) {
   const state = value >= cap ? 'full' : vital && value <= 0 ? 'empty' : '';
   return (
     <div class={`stat ${state}`} title={`${label} (cap ${cap}). ${title}`}>
       <Icon name={icon} />
       <div>
         <b>{Math.floor(value)}</b>
+        <Delta value={value} scope={scope} />
         <small>
           {state === 'full' ? 'FULL' : label.toUpperCase()} /{cap}
         </small>
@@ -152,7 +227,11 @@ export function BuildPanel({ s }: { s: GameState }) {
           Build <kbd>B</kbd>
         </span>
         <div class="tools">
-          <button class={`btn small ${app.view.demolish ? 'danger' : 'ghost'}`} onClick={() => ((app.view.demolish = !app.view.demolish), (app.view.build = null), (app.view.layer = 1), refresh())} title="Demolish (X): 60% refund">
+          <button
+            class={`btn small ${app.view.demolish ? 'danger' : 'ghost'}`}
+            onClick={() => ((app.view.demolish = !app.view.demolish), (app.view.build = null), (app.view.layer = 1), refresh())}
+            title="Demolish (X): 60% refund"
+          >
             Remove<kbd>X</kbd>
           </button>
           <button class="btn small ghost icon-btn" onClick={() => ((app.buildOpen = false), refresh())} title="Collapse (B)">
@@ -174,7 +253,7 @@ export function BuildPanel({ s }: { s: GameState }) {
         <div class="items">
           {items.map((b) => {
             const locked = rank < b.rank;
-            const cant = s.cash < b.cost;
+            const cant = s.cash < b.cost || s.parts < (b.parts ?? 0);
             const on = app.view.build === b.id;
             return (
               <button
@@ -188,7 +267,17 @@ export function BuildPanel({ s }: { s: GameState }) {
                 <BuildIcon type={b.id} />
                 <div class="item-body">
                   <div class="item-name">
-                    {b.name} <b class={cant ? 'bad' : ''}>${b.cost}</b>
+                    {b.name}
+                    <b class={cant ? 'bad' : ''}>
+                      ${b.cost}
+                      {b.parts ? (
+                        <span class={`part-cost ${s.parts < b.parts ? 'short' : ''}`}>
+                          {' + '}
+                          {b.parts}
+                          <Icon name="parts" />
+                        </span>
+                      ) : null}
+                    </b>
                   </div>
                   <div class="item-desc">{locked ? `Locked · unlocks at rank ${RANKS[b.rank].name}` : b.desc}</div>
                   {!locked && (
@@ -225,12 +314,16 @@ function BusinessPanel({ s }: { s: GameState }) {
         <p>Grab slices and pretzels at the food court like a normal customer. ${FOOD_PRICE} each.</p>
         <div class="row">
           {[5, 10, 25].map((n) => (
-            <button class="btn small" disabled={s.food >= d.foodCap} onClick={() => {
-              const err = buyFood(s, n);
-              if (err) toast(err, 'bad');
-              else audio.play('cash');
-              refresh();
-            }}>
+            <button
+              class="btn small"
+              disabled={s.food >= d.foodCap}
+              onClick={() => {
+                const err = buyFood(s, n);
+                if (err) toast(err, 'bad');
+                else audio.play('cash');
+                refresh();
+              }}
+            >
               +{n} (${n * FOOD_PRICE})
             </button>
           ))}
@@ -244,11 +337,15 @@ function BusinessPanel({ s }: { s: GameState }) {
         {s.business.kiosk ? (
           <div class="ok-line">✓ Leased</div>
         ) : (
-          <button class="btn" disabled={rank < 2 || s.cash < KIOSK_COST} onClick={() => {
-            const err = leaseKiosk(s);
-            if (err) toast(err, 'bad');
-            refresh();
-          }}>
+          <button
+            class="btn"
+            disabled={rank < 2 || s.cash < KIOSK_COST}
+            onClick={() => {
+              const err = leaseKiosk(s);
+              if (err) toast(err, 'bad');
+              refresh();
+            }}
+          >
             {rank < 2 ? `Locked · ${RANKS[2].name}` : `Lease for $${KIOSK_COST}`}
           </button>
         )}
@@ -259,18 +356,26 @@ function BusinessPanel({ s }: { s: GameState }) {
         </h4>
         <p>Lease a vacant storefront and sell goods at holiday markups. Earns passive income while open. Nobody complains about their own store's ceiling. ${POPUP_COST} + $90/day.</p>
         {s.business.popupRoom >= 0 ? (
-          <div class="ok-line">✓ {popupName(s)} in the old {LAYOUT.rooms[s.business.popupRoom].name}</div>
+          <div class="ok-line">
+            ✓ {popupName(s)} in the old {LAYOUT.rooms[s.business.popupRoom].name}
+          </div>
         ) : rank < 3 ? (
-          <button class="btn" disabled>Locked · {RANKS[3].name}</button>
+          <button class="btn" disabled>
+            Locked · {RANKS[3].name}
+          </button>
         ) : vacant.length === 0 ? (
           <div class="muted">No vacant stores yet. Give it time. This mall is dying.</div>
         ) : (
           vacant.map(({ i }) => (
-            <button class="btn" disabled={s.cash < POPUP_COST} onClick={() => {
-              const err = openPopup(s, i);
-              if (err) toast(err, 'bad');
-              refresh();
-            }}>
+            <button
+              class="btn"
+              disabled={s.cash < POPUP_COST}
+              onClick={() => {
+                const err = openPopup(s, i);
+                if (err) toast(err, 'bad');
+                refresh();
+              }}
+            >
               Open in old {LAYOUT.rooms[i].name} (${POPUP_COST})
             </button>
           ))
@@ -287,15 +392,16 @@ function BusinessPanel({ s }: { s: GameState }) {
   );
 }
 
-const JOB_GROUPS = (shift: 'day' | 'night') => JOBS.filter((j) => j.id === 'rest' || j.shift === shift || j.shift === 'both');
-
 export function CrewPanel({ s }: { s: GameState }) {
   const beds = getDerived(s).beds.reduce((a, b) => a + b.slots, 0);
   const shortBeds = s.crew.length > beds;
   return (
     <div class="crewpanel panel">
       <div class="panel-head">
-        <span>The Rats · {s.crew.length}</span>
+        <span>The Bats · {s.crew.length}</span>
+        <button class="btn small" onClick={() => openJobs(app.view.selectedCrew ?? app.crewExpanded, shiftNow(s) ?? undefined)}>
+          Job Board<kbd>J</kbd>
+        </button>
         <small class={shortBeds ? 'warn' : ''} title={shortBeds ? 'Not enough beds for everyone. Build more in the Living tab.' : undefined}>
           {beds} {beds === 1 ? 'BED' : 'BEDS'}
           {shortBeds ? ' · NEED MORE' : ''}
@@ -310,40 +416,42 @@ export function CrewPanel({ s }: { s: GameState }) {
   );
 }
 
-function JobSelect({ s, c, shift }: { s: GameState; c: Crew; shift: 'day' | 'night' }) {
-  const value = shift === 'day' ? c.dayJob : c.nightJob;
-  const rank = rankOf(s);
-  const blocked = value !== 'rest' ? jobBlocked(s, c, value) : null;
+function JobSummary({ s, c }: { s: GameState; c: Crew }) {
+  const live = shiftNow(s);
+  const working = currentJob(s, c);
   return (
-    <label class={`jobsel ${shift}`}>
-      <span>{shift === 'day' ? 'DAY JOB' : 'NIGHT JOB'}</span>
-      <select
-        value={value}
-        onChange={(e) => {
-          const v = (e.target as HTMLSelectElement).value as JobId;
-          if (shift === 'day') c.dayJob = v;
-          else c.nightJob = v;
-          c.waitUntil = 0;
-          audio.play('click');
-          refresh();
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {JOB_GROUPS(shift).map((j) => (
-          <option value={j.id} disabled={rank < j.rank}>
-            {j.name}
-            {rank < j.rank ? ` (locked: ${RANKS[j.rank].name})` : j.risk !== 'none' ? ` · ${j.risk} risk` : ''}
-          </option>
-        ))}
-      </select>
-      {blocked && <em class="warn">{blocked}</em>}
-    </label>
+    <div class="crew-jobs" onClick={(e) => e.stopPropagation()}>
+      {(['day', 'night'] as const).map((shift) => {
+        const job = shift === 'day' ? c.dayJob : c.nightJob;
+        const fillingIn = live === shift && working !== job && working !== 'rest';
+        return (
+          <button class={`job-summary ${shift} ${live === shift ? 'live' : ''}`} onClick={() => openJobs(c.id, shift)} title="Open the Job Board">
+            <span>{shift === 'day' ? 'DAY' : 'NIGHT'}</span>
+            <b>
+              <i class={live === shift && working === job && job !== 'rest' ? 'now' : job !== 'rest' && jobUnavailable(s, c, job) ? 'skip' : ''}>{JOB[job].name}</i>
+              {fillingIn && <i class="now"> → {JOB[working].name}</i>}
+            </b>
+          </button>
+        );
+      })}
+    </div>
   );
+}
+
+function familiarityTitle(s: GameState, c: Crew): string {
+  const banned = c.bannedUntil > s.time ? `\nBanned from day jobs until ${formatDate(dayOf(c.bannedUntil))}.` : '';
+  return `Officer Dana (day security) recognition: ${Math.round(c.familiarity)}%. This is per Bat and separate from the mall-wide Alert.\nRises while doing sketchy day jobs in view of Dana (or loitering backstage). Fades 12 per day. The kiosk and pop-up lower it.\nAt 100%, this Bat is banned from day jobs for 3 days and Alert goes up 3. Night jobs are unaffected.${banned}`;
+}
+
+function awayText(s: GameState, c: Crew): string {
+  if (c.awayUntil === Infinity) return 'In custody';
+  if (c.awayUntil - s.time < 1440) return `Released, back around ${formatClock(c.awayUntil)}`;
+  return `In county until ${formatDate(dayOf(c.awayUntil))}`;
 }
 
 function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean }) {
   const away = c.state === 'away';
-  const where = away ? (c.awayUntil === Infinity ? 'In custody' : `In county until ${formatDate(dayOf(c.awayUntil))}`) : c.layer === 0 ? 'In the mall' : 'In the ceiling';
+  const where = away ? awayText(s, c) : c.layer === 0 ? 'In the mall' : 'In the ceiling';
   const job = currentJob(s, c);
   const selected = app.view.selectedCrew === c.id;
   return (
@@ -365,19 +473,18 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
             <span class={c.layer === 0 ? 'in-mall' : ''}>{where}</span> · {c.thought}
           </div>
           <div class="crew-bars">
-            <Bar value={c.energy} color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'} label="NRG" title={`Energy ${Math.round(c.energy)}`} />
-            <Bar value={c.hunger} color={c.hunger < 25 ? '#ec5b3c' : '#ffc93e'} label="FED" title={`Fed ${Math.round(c.hunger)}`} />
-            <Bar value={c.morale} color={c.morale < 25 ? '#ec5b3c' : '#ff6db3'} label="MOOD" title={`Morale ${Math.round(c.morale)}`} />
+            <Bar
+              value={c.energy}
+              color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'}
+              label="NRG"
+              title={`Energy ${Math.round(c.energy)}. Drains while awake, refills sleeping (faster in a bed). Set a shift to Rest to let them sleep.`}
+            />
+            <Bar value={c.familiarity} color="#ff2d55" label="COP" title={familiarityTitle(s, c)} />
           </div>
         </div>
         {c.detect > 0.05 && c.layer === 0 && <div class="detect" style={{ '--d': `${Math.min(1, c.detect) * 360}deg` } as Record<string, string>} />}
       </div>
-      {!away && (
-        <div class="crew-jobs" onClick={(e) => e.stopPropagation()}>
-          <JobSelect s={s} c={c} shift="day" />
-          <JobSelect s={s} c={c} shift="night" />
-        </div>
-      )}
+      {!away && <JobSummary s={s} c={c} />}
       {expanded && !away && (
         <div class="crew-detail" onClick={(e) => e.stopPropagation()}>
           <div class="statline">
@@ -401,18 +508,24 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
             </div>
           )}
           <div class="bio">"{c.bio}"</div>
-          <Bar value={c.familiarity} color="#ff2d55" label="Recognized by mall cop" title="Day jobs build recognition with Officer Dana. At 100% they get banned from day jobs for 3 days." />
-          {c.bannedUntil > s.time && <div class="warn">Laying low from day jobs until {formatDate(dayOf(c.bannedUntil))}</div>}
+          <Bar value={c.familiarity} color="#ff2d55" label="Officer Dana recognizes them" title={familiarityTitle(s, c)} />
+          <div class="muted small">Day jobs only. Fades 12/day. At 100%: banned from day jobs for 3 days, and Alert +3.</div>
+          {c.bannedUntil > s.time && <div class="warn">Banned from day jobs until {formatDate(dayOf(c.bannedUntil))}</div>}
           <div class="row">
             <button class="btn small" onClick={() => ((app.view.layer = c.layer), app.renderer?.centerOn(c.x, c.y), refresh())}>
               Find<kbd>F</kbd>
+            </button>
+            <button class="btn small" onClick={() => openJobs(c.id, shiftNow(s) ?? undefined)}>
+              Jobs<kbd>J</kbd>
             </button>
             {c.layer === 0 && (
               <button class="btn small danger" onClick={() => (recallCrew(s, c), refresh())} title="Send them back up the ladder">
                 Recall
               </button>
             )}
-            <span class="muted">Job: {JOB[job].name} · earned {money(c.earned)}</span>
+            <span class="muted">
+              Job: {JOB[job].name} · earned {money(c.earned)}
+            </span>
           </div>
         </div>
       )}
@@ -421,7 +534,7 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
 }
 
 export function LogPanel({ s }: { s: GameState }) {
-  const entries = s.log.slice(-(app.logOpen ? 9 : 2)).reverse();
+  const entries = (app.logOpen ? s.log.slice() : s.log.slice(-2)).reverse();
   return (
     <div class={`logpanel panel ${app.logOpen ? '' : 'mini'}`}>
       <div class="panel-head" onClick={() => ((app.logOpen = !app.logOpen), refresh())} title={app.logOpen ? 'Show less' : 'Show more'}>
@@ -473,10 +586,93 @@ export function ObjectiveCard({ s }: { s: GameState }) {
   );
 }
 
+const INSPECTOR: Record<InspectionKind, string> = { complaint: 'Maintenance', power: 'Electrician', pest: 'Pest control', fire: 'Fire marshal', sweep: 'Ceiling sweep' };
+
+const isClean = (f: InspectionForecast) => f.verdict !== 'search' || (!f.confiscated.length && !f.deckTiles.length);
+const whenText = (s: GameState, ins: Inspection) => (ins.state === 'scheduled' ? `${dayOf(ins.at) === dayOf(s.time) ? 'today' : 'tomorrow'} ${formatClock(ins.at)}` : 'on the way now');
+
+export function InspectionPanel({ s }: { s: GameState }) {
+  const upcoming = s.inspections.filter((i) => i.state !== 'done').sort((a, b) => a.at - b.at);
+  if (!upcoming.length) return null;
+  const forecasts = upcoming.map((ins) => forecastInspection(s, ins));
+  const risky = forecasts.filter((f) => !isClean(f)).length;
+  const open = app.inspectionsOpen;
+  const next = upcoming[0];
+  const toggle = () => ((app.inspectionsOpen = !open), audio.play('click'), refresh());
+  return (
+    <div class={`inspections ${open ? 'open' : ''} ${risky ? 'risky' : 'clean'}`}>
+      <button class="insp-bar" onClick={toggle} title={open ? 'Collapse' : 'Show inspections'}>
+        <Icon name="alert" size={16} />
+        <b>{upcoming.length === 1 ? 'Inspection' : `${upcoming.length} inspections`}</b>
+        <span>
+          {LAYOUT.rooms[next.room].name}, {whenText(s, next)}
+        </span>
+        <i>{risky ? `${risky} will find stuff` : 'covered'}</i>
+        <em>{open ? 'LESS ▴' : 'MORE ▾'}</em>
+      </button>
+      {open && (
+        <div class="insp-list">
+          {s.excuseFatigue > 0.01 && <small class="warn">EXCUSES WEARING THIN +{Math.round(s.excuseFatigue * 100)}</small>}
+          {upcoming.map((ins, k) => {
+            const f = forecasts[k];
+            return (
+              <div class={`insp ${isClean(f) ? 'clean' : ''}`} onClick={() => (focusTile(ins.x, ins.y, 1), refresh())} title="Click to look">
+                <div class="insp-head">
+                  <b>
+                    {INSPECTOR[ins.kind]} · {LAYOUT.rooms[ins.room].name}
+                  </b>
+                  <span>{whenText(s, ins)}</span>
+                </div>
+                <div class="insp-sus" title="How closely they'll look.">
+                  <span class="label">SUSPICION</span>
+                  <div class="sus-track">
+                    <div class="sus-fill" style={{ width: `${f.suspicion * 100}%` }} />
+                  </div>
+                  <b>{Math.round(f.suspicion * 100)}%</b>
+                </div>
+                <div class={isClean(f) ? 'good' : 'bad'}>{forecastLabel(f)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const HEAT_LEGEND: Record<HeatKind, { low: string; high: string; idle: string; how: string }> = {
+  noise: {
+    low: 'Quiet',
+    high: 'Loud',
+    idle: 'Nothing up here is making noise right now.',
+    how: 'Noise from your gear and footsteps leaks into the stores below. Stores with low noise cover complain first. Foam and the pod muffle it.',
+  },
+  smell: {
+    low: 'Faint',
+    high: 'Reeking',
+    idle: 'Nothing up here smells right now.',
+    how: 'Cooking and crowds leave a smell that drifts down and lingers. Food courts hide it, bookstores do not. Box fans clear it faster.',
+  },
+};
+
+function HeatLegend({ s, kind }: { s: GameState; kind: HeatKind }) {
+  const legend = HEAT_LEGEND[kind];
+  const idle = peakHeat(s, kind) < 0.02;
+  return (
+    <div class="heat-legend panel">
+      <div class="heat-scale">
+        <span>{legend.low}</span>
+        <i style={{ background: rampGradient(kind) }} />
+        <span>{legend.high}</span>
+      </div>
+      <p>{idle ? legend.idle : legend.how}</p>
+    </div>
+  );
+}
+
 export function BottomBar({ s }: { s: GameState }) {
   const overlays = [
     { id: 'none', label: 'Plain' },
-    { id: 'complaints', label: 'Complaints' },
     { id: 'noise', label: 'Noise' },
     { id: 'smell', label: 'Smell' },
     { id: 'power', label: 'Power' },
@@ -490,7 +686,12 @@ export function BottomBar({ s }: { s: GameState }) {
           Ceiling
         </button>
         <button class={`btn ${app.view.layer === 0 ? 'on' : 'ghost'}`} onClick={() => ((app.view.layer = 0), audio.play('climb'), refresh())}>
-          Mall {inMall > 0 && <i class="badge" title={`${inMall} rat${inMall === 1 ? '' : 's'} down in the mall`}>{inMall}</i>}
+          Mall{' '}
+          {inMall > 0 && (
+            <i class="badge" title={`${inMall} Bat${inMall === 1 ? '' : 's'} down in the mall`}>
+              {inMall}
+            </i>
+          )}
         </button>
       </div>
       <div class="overlays" title="Cycle overlays (O)">
@@ -502,7 +703,7 @@ export function BottomBar({ s }: { s: GameState }) {
             class={`chip ${app.view.overlay === o.id ? 'on' : ''}`}
             onClick={() => {
               app.view.overlay = o.id;
-              if (o.id !== 'none') app.view.layer = 1;
+              if (o.id === 'power') app.view.layer = 1;
               refresh();
             }}
           >
@@ -510,9 +711,15 @@ export function BottomBar({ s }: { s: GameState }) {
           </button>
         ))}
       </div>
+      {(app.view.overlay === 'noise' || app.view.overlay === 'smell') && <HeatLegend s={s} kind={app.view.overlay} />}
       {app.view.build ? (
         <div class="hint active">
           Placing {BUILD[app.view.build].name}. {app.view.build === 'deck' || app.view.build === 'foam' ? 'Drag to lay many. ' : ''}
+          {canRotate(app.view.build) && (
+            <span>
+              <kbd>R</kbd>rotate
+            </span>
+          )}
           <span>
             <kbd>RMB</kbd>/<kbd>Esc</kbd> stop
           </span>
@@ -612,6 +819,28 @@ export function Tooltip({ s }: { s: GameState }) {
   );
 }
 
+function objectUsage(s: GameState, o: Placed, roomName: string): string[] {
+  const def = BUILD[o.type];
+  const names = (crew: Crew[]) => crew.map((c) => c.name).join(', ');
+  if (def.beds) {
+    const sleepers = s.crew.filter((c) => c.bedId === o.id);
+    return [`Sleeps ${def.beds}. ${sleepers.length ? `Claimed by ${names(sleepers)}.` : 'Unclaimed.'}`];
+  }
+  if (o.type === 'workbench') {
+    const user = s.crew.find((c) => c.useObj === o.id && c.state === 'working');
+    return [`Capacity: 1 Bat at a time. ${user ? `${user.name} is tinkering.` : 'Free right now.'}`, o.powered ? '' : 'Unpowered benches cannot be used.'].filter(Boolean);
+  }
+  if (def.racket) {
+    if (o.jammed) return ['Jammed. Earning nothing until cleared.'];
+    if (!o.powered) return ['Unpowered. Earning nothing.'];
+    return [`Skimming ${roomName} every hour the mall is open. Busier stores pay more, and complaints there rise slowly.`];
+  }
+  if (def.drop)
+    return [`Route: a shortcut between your deck and ${roomName}. Jobs and escapes through ${roomName} get shorter.`, `Risk: adds complaints in ${roomName}, and inspections there home in on it.`];
+  const users = s.crew.filter((c) => c.useObj === o.id);
+  return users.length ? [`In use by ${names(users)}.`] : [];
+}
+
 export function SelectedObject({ s }: { s: GameState }) {
   if (app.selectedObj === null) return null;
   const o = s.objects.find((x) => x.id === app.selectedObj);
@@ -622,7 +851,7 @@ export function SelectedObject({ s }: { s: GameState }) {
     <div class="selobj panel">
       <div class="panel-head">
         <span>{def.name}</span>
-        <button class="btn small ghost icon-btn" onClick={() => ((app.selectedObj = null), refresh())} title="Close (Esc)">
+        <button class="btn small ghost icon-btn" onClick={() => (selectObject(null), refresh())} title="Close (Esc)">
           ×
         </button>
       </div>
@@ -632,13 +861,39 @@ export function SelectedObject({ s }: { s: GameState }) {
           <div>{def.desc}</div>
           <div class="muted">Above {room.name}</div>
           {def.power && <div class={o.powered ? 'good' : 'bad'}>{o.powered ? 'Powered' : 'Unpowered: build a Power Splice within range'}</div>}
-          {def.supply && <div>Load: {o.supplyLoad}/{def.supply}W {def.offGrid ? '(off-grid)' : `· billed to ${o.tapRoom >= 0 ? LAYOUT.rooms[o.tapRoom].name : 'nobody (dead)'}`}</div>}
+          {def.supply && (
+            <div>
+              Load: {o.supplyLoad}/{def.supply}W {def.offGrid ? '(off-grid)' : `· billed to ${o.tapRoom >= 0 ? LAYOUT.rooms[o.tapRoom].name : 'nobody (dead)'}`}
+            </div>
+          )}
+          {objectUsage(s, o, room.name).map((line) => (
+            <div class="usage">{line}</div>
+          ))}
           <div class="flavor">"{def.flavor}"</div>
+          {o.jammed && (
+            <button
+              class="btn small"
+              disabled={s.parts < 1}
+              onClick={() => {
+                const err = clearJam(s, o);
+                if (err) toast(err, 'bad');
+                else audio.play('build');
+                refresh();
+              }}
+            >
+              Clear jam (1 part)
+            </button>
+          )}
+          {canRotate(o.type) && (
+            <button class="btn small" onClick={() => (rotateObject(o), audio.play('click'), refresh())}>
+              Rotate<kbd>R</kbd>
+            </button>
+          )}
           <button
             class="btn small danger"
             onClick={() => {
               demolishAt(s, o.x, o.y);
-              app.selectedObj = null;
+              selectObject(null);
               audio.play('demolish');
               refresh();
             }}
@@ -651,7 +906,7 @@ export function SelectedObject({ s }: { s: GameState }) {
   );
 }
 
-const ART = new Set(['intro', 'news', 'caught', 'gary', 'feast', 'wallet']);
+const ART = new Set(['intro', 'news', 'caught', 'gary', 'feast', 'wallet', 'mannequin', 'pretzel', 'ferret', 'psychic', 'mallwalkers', 'vent', 'hotdog', 'furby', 'glamour']);
 
 export function ModalView({ s }: { s: GameState }) {
   const m = s.modals[0];
@@ -660,12 +915,14 @@ export function ModalView({ s }: { s: GameState }) {
     <div class="modal-wrap">
       <div class="modal panel">
         <div class={`modal-art art-${m.art ?? 'none'}`}>
-          {m.art === 'recruit' && s.candidate ? <Portrait look={s.candidate.look} sprite={crewSprite(s.candidate.archetype)} size={96} bg="#48298a" /> : <Icon name={`art.${ART.has(m.art ?? '') ? m.art : 'pager'}`} size={128} />}
+          {m.art === 'recruit' && s.candidate ? (
+            <Portrait look={s.candidate.look} sprite={crewSprite(s.candidate.archetype)} size={96} bg="#48298a" />
+          ) : (
+            <Icon name={`art.${ART.has(m.art ?? '') ? m.art : 'pager'}`} size={128} />
+          )}
         </div>
         <h2>{m.title}</h2>
-        <div class="modal-body">
-          {m.body.split('\n').map((p) => (p ? <p>{p}</p> : <br />))}
-        </div>
+        <div class="modal-body">{m.body.split('\n').map((p) => (p ? <p>{p}</p> : <br />))}</div>
         <div class="modal-choices">
           {m.choices.map((c) => (
             <button
@@ -711,9 +968,7 @@ export function GameOver({ s, onMenu, onNew }: { s: GameState; onMenu: () => voi
     <div class="modal-wrap over">
       <div class={`modal panel gameover ${o.won ? 'won' : 'lost'}`}>
         <h1>{o.title}</h1>
-        <div class="modal-body">
-          {o.text.split('\n').map((p) => (p ? <p>{p}</p> : <br />))}
-        </div>
+        <div class="modal-body">{o.text.split('\n').map((p) => (p ? <p>{p}</p> : <br />))}</div>
         <div class="chart">
           {s.dailyIncome.map((v) => (
             <i style={{ height: `${(v / max) * 100}%` }} title={`$${v}`} />

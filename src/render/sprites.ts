@@ -42,7 +42,7 @@ export interface Texture {
 
 const urls = import.meta.glob('../assets/sprites/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const images = new Map<string, HTMLImageElement>();
-const dimmed = new Map<PropEntry, HTMLCanvasElement>();
+const dimmed = new Map<string, HTMLCanvasElement>();
 const textures = new Map<string, Texture>();
 
 const props = manifest.props as Record<string, PropEntry[]>;
@@ -88,7 +88,7 @@ export function hasProp(id: string) {
 }
 
 function dim(entry: PropEntry, img: HTMLImageElement) {
-  let c = dimmed.get(entry);
+  let c = dimmed.get(entry.file);
   if (!c) {
     c = document.createElement('canvas');
     c.width = entry.w;
@@ -96,7 +96,7 @@ function dim(entry: PropEntry, img: HTMLImageElement) {
     const ctx = c.getContext('2d')!;
     ctx.filter = 'brightness(0.55) saturate(0.6)';
     ctx.drawImage(img, 0, 0);
-    dimmed.set(entry, c);
+    dimmed.set(entry.file, c);
   }
   return c;
 }

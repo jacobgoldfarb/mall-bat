@@ -1,4 +1,4 @@
-import { BUILD, type BuildId } from '../game/defs';
+import { BUILD, canRotate, type BuildId } from '../game/defs';
 import {
   C_AC,
   C_DUCT,
@@ -19,17 +19,18 @@ import {
 } from '../game/layout';
 import { hash2 } from '../game/rng';
 import { guardCone } from '../game/npc';
-import { noiseField } from '../game/sim';
-import type { Crew, GameState, Npc } from '../game/state';
+import { drawHeatMap } from './heat';
+import type { Crew, GameState, Npc, Placed } from '../game/state';
 import { dayOf, minuteOfDay, phaseAt } from '../game/time';
-import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, getDerived } from '../game/world';
+import { forecastInspection, forecastLabel } from '../game/inspect';
+import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, sightPolygon } from '../game/world';
 import { popupName } from '../game/sim';
 import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
-import { drawBuildable, drawFixture } from './objects';
+import { drawBuildable, drawFixture, drawFloorSleeper, sleeperSprite } from './objects';
 import { characterIds, drawPropSprite, texture, type Texture } from './sprites';
 
-export type Overlay = 'none' | 'noise' | 'smell' | 'power' | 'complaints';
+export type Overlay = 'none' | 'noise' | 'smell' | 'power';
 
 export interface ViewState {
   layer: 0 | 1;
@@ -40,6 +41,7 @@ export interface ViewState {
   dragStart: { x: number; y: number } | null;
   selectedCrew: number | null;
   xray: boolean;
+  flip: boolean;
 }
 
 interface Drawable {
@@ -69,11 +71,11 @@ function floorLook(id: string, x: number, y: number, color?: string): FloorLook 
   return { tex, mul, flip: !tex.tint && hash2(x, y, 21) > 0.5 };
 }
 
-function bakeIso(width: number, height: number, originX: number, lookAt: (tx: number, ty: number) => FloorLook | null): ImageData {
+function bakeIso(width: number, height: number, originX: number, lookAt: (tx: number, ty: number) => FloorLook | null, originY = 0): ImageData {
   const img = new ImageData(width, height);
   const cache = new Map<number, FloorLook | null>();
   for (let py = 0; py < height; py++) {
-    const b = (py + 0.5) / (TH / 2);
+    const b = (py + originY + 0.5) / (TH / 2);
     for (let px = 0; px < width; px++) {
       const a = (px + originX + 0.5) / (TW / 2);
       const wx = (a + b) / 2;
@@ -104,6 +106,18 @@ function bakeIso(width: number, height: number, originX: number, lookAt: (tx: nu
   return img;
 }
 
+function onContextRestored(canvas: HTMLCanvasElement, redraw: () => void) {
+  canvas.addEventListener('contextrestored', redraw);
+}
+
+function roomScreenRect(r: RoomDef) {
+  const left = Math.max(0, Math.floor(isoX(r.x0, r.y1 + 1) - MAP_X) - 2);
+  const right = Math.min(MAP_W, Math.ceil(isoX(r.x1 + 1, r.y0) - MAP_X) + 2);
+  const top = Math.max(0, Math.floor(isoY(r.x0, r.y0)) - 2);
+  const bottom = Math.min(MAP_H, Math.ceil(isoY(r.x1 + 1, r.y1 + 1)) + 2);
+  return { left, top, width: right - left, height: bottom - top };
+}
+
 export class Renderer {
   ctx: Ctx;
   cam: Camera = { x: 0, y: 0, zoom: 1 };
@@ -119,6 +133,7 @@ export class Renderer {
   private light: HTMLCanvasElement;
   private lctx: Ctx;
   private signs: { room: number; x: number; y: number; dir: 'x' | 'y' }[] = [];
+  private cones = new Map<string, { x: number; y: number }[]>();
 
   constructor(public canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -127,6 +142,7 @@ export class Renderer {
     this.computeSigns();
     this.buildCeilingTiles();
     this.resize();
+    onContextRestored(this.floorCanvas, () => (this.floorSig = ''));
   }
 
   resize() {
@@ -214,6 +230,7 @@ export class Renderer {
   private buildFloors(s: GameState) {
     const sig = s.rooms.map((r) => (r.vacant ? (r.popup ? 'p' : 'v') : 'o')).join('');
     if (sig === this.floorSig) return;
+    const previous = this.floorSig;
     this.floorSig = sig;
     this.floor.clear();
     const looks = new Map<number, FloorLook | null>();
@@ -229,15 +246,30 @@ export class Renderer {
         else this.floorTile(r, x, y, vacant);
       }
     }
+    const lookAt = (tx: number, ty: number) => (inBounds(tx, ty) ? (looks.get(idx(tx, ty)) ?? null) : null);
     const c = this.floorCanvas;
-    c.width = MAP_W;
-    c.height = MAP_H;
     const fctx = c.getContext('2d')!;
-    fctx.putImageData(bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (inBounds(tx, ty) ? (looks.get(idx(tx, ty)) ?? null) : null)), 0, 0);
-    fctx.translate(-MAP_X, 0);
-    for (const [color, path] of this.floor) {
-      fctx.fillStyle = color;
-      fctx.fill(path);
+    const regions =
+      previous.length === sig.length
+        ? LAYOUT.rooms.filter((_, ri) => previous[ri] !== sig[ri]).map(roomScreenRect)
+        : [{ left: 0, top: 0, width: MAP_W, height: MAP_H }];
+    if (previous.length !== sig.length) {
+      c.width = MAP_W;
+      c.height = MAP_H;
+    }
+    for (const rect of regions) {
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.putImageData(bakeIso(rect.width, rect.height, MAP_X + rect.left, lookAt, rect.top), rect.left, rect.top);
+      fctx.save();
+      fctx.translate(-MAP_X, 0);
+      fctx.beginPath();
+      fctx.rect(rect.left + MAP_X, rect.top, rect.width, rect.height);
+      fctx.clip();
+      for (const [color, path] of this.floor) {
+        fctx.fillStyle = color;
+        fctx.fill(path);
+      }
+      fctx.restore();
     }
   }
 
@@ -380,6 +412,7 @@ export class Renderer {
         dctx.lineTo(TW / 2, TH - 0.5);
         dctx.lineTo(TW, TH / 2);
         dctx.stroke();
+        onContextRestored(c, () => this.buildCeilingTiles());
         return c;
       });
     const open = (x: number, y: number) => inBounds(x, y) && [C_OPEN, C_DUCT, C_AC].includes(LAYOUT.ceilingKind[idx(x, y)]);
@@ -389,6 +422,7 @@ export class Renderer {
       c.width = MAP_W;
       c.height = MAP_H;
       c.getContext('2d')!.putImageData(bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (open(tx, ty) ? { ...ceiling, flip: hash2(tx, ty, 4) > 0.5 } : null)), 0, 0);
+      onContextRestored(c, () => this.buildCeilingTiles());
       return;
     }
     for (let y = 0; y < H; y++) {
@@ -406,6 +440,7 @@ export class Renderer {
     const ctx = this.ctx;
     const phase = phaseAt(s.time);
     const night = phase === 'night';
+    this.cones.clear();
     this.buildFloors(s);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = v.layer === 1 ? '#07060c' : night ? '#07080f' : '#14121e';
@@ -425,6 +460,7 @@ export class Renderer {
     if (v.layer === 0) {
       this.drawCones(s, t);
       this.drawLighting(s, t, 0);
+      if (v.overlay === 'noise' || v.overlay === 'smell') drawHeatMap(ctx, s, v.overlay);
       this.drawSigns(s, night);
       this.drawMallOverlays(s, t);
       this.drawAgentHud(s, v, 0);
@@ -577,7 +613,7 @@ export class Renderer {
     }
     for (const c of s.crew) {
       if (c.layer !== layer || c.state === 'away') continue;
-      items.push({ depth: c.x + c.y, order: 4, fn: () => this.drawCrew(ctx, c, t) });
+      items.push({ depth: c.x + c.y, order: 4, fn: () => this.drawCrew(ctx, s, c, t) });
     }
   }
 
@@ -605,7 +641,7 @@ export class Renderer {
     });
   }
 
-  private drawCrew(ctx: Ctx, c: Crew, t: number) {
+  private drawCrew(ctx: Ctx, s: GameState, c: Crew, t: number) {
     const px = isoX(c.x, c.y);
     const py = isoY(c.x, c.y);
     ctx.strokeStyle = c.state === 'fleeing' ? '#ff2d55' : '#2ad4c8';
@@ -614,6 +650,10 @@ export class Renderer {
     ctx.ellipse(px, py, 9, 4.5, 0, 0, Math.PI * 2);
     ctx.stroke();
     const sleeping = c.state === 'sleeping' && c.layer === 1;
+    if (sleeping) {
+      const bed = bedUnder(s, c);
+      if (bed ? sleeperSprite(bed.type, sleepersIn(s, bed)) : drawFloorSleeper(ctx, c.x, c.y)) return;
+    }
     drawPerson(ctx, px, py, c.look, {
       walking: c.moving,
       t: t + c.id * 5,
@@ -672,11 +712,14 @@ export class Renderer {
   }
 
   private conePath(ctx: Ctx | Path2D, x: number, y: number, facing: number, fov: number, range: number) {
-    ctx.moveTo(isoX(x, y), isoY(x, y));
-    for (let k = 0; k <= 12; k++) {
-      const a = facing - fov / 2 + (fov * k) / 12;
-      ctx.lineTo(isoX(x + Math.cos(a) * range, y + Math.sin(a) * range), isoY(x + Math.cos(a) * range, y + Math.sin(a) * range));
+    const key = `${x},${y},${facing},${fov},${range}`;
+    let points = this.cones.get(key);
+    if (!points) {
+      points = sightPolygon(x, y, facing, fov, range);
+      this.cones.set(key, points);
     }
+    ctx.moveTo(isoX(x, y), isoY(x, y));
+    for (const p of points) ctx.lineTo(isoX(p.x, p.y), isoY(p.x, p.y));
     ctx.closePath();
   }
 
@@ -864,7 +907,6 @@ export class Renderer {
 
   private drawCeiling(s: GameState, v: ViewState, t: number) {
     const ctx = this.ctx;
-    const d = getDerived(s);
     const phase = phaseAt(s.time);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -893,7 +935,7 @@ export class Renderer {
         ctx.stroke();
       }
 
-    this.drawRoomOutlines(s, v);
+    this.drawRoomOutlines(s);
 
     for (let i = 0; i < N; i++) {
       if (!s.deck[i]) continue;
@@ -935,8 +977,6 @@ export class Renderer {
     ctx.strokeStyle = '#c9a23a';
     ctx.lineWidth = 1.5;
     ctx.stroke();
-
-    if (v.overlay === 'noise' || v.overlay === 'smell') this.drawHeat(s, v.overlay);
 
     const items: Drawable[] = [];
     for (let i = 0; i < N; i++) {
@@ -991,29 +1031,30 @@ export class Renderer {
     }
     for (const o of s.objects) {
       const inUse = o.usedUntil > s.time;
-      items.push({ depth: o.x + o.y + 1, order: 2, fn: () => drawBuildable(ctx, o.type, o.x, o.y, t, { powered: o.powered, inUse }) });
+      items.push({ depth: o.x + o.y + 1, order: 2, fn: () => drawBuildable(ctx, o.type, o.x, o.y, t, { powered: o.powered, inUse, flip: o.flipped, alert: o.jammed, sleepers: sleepersIn(s, o) }) });
     }
     this.collectAgents(s, items, t, 1);
     items.sort((a, b) => a.depth - b.depth || a.order - b.order);
     for (const it of items) it.fn();
 
     this.drawCeilingLighting(s, t, phase);
+    if (v.overlay === 'noise' || v.overlay === 'smell') drawHeatMap(ctx, s, v.overlay, 1);
     this.drawGhosts(s);
     this.drawRoomLabels(s, v);
-    this.drawInspectionZones(s, d.scanner, t);
+    this.drawInspectionZones(s, t);
     this.drawAgentHud(s, v, 1);
 
     if (v.overlay === 'power') this.drawPowerOverlay(s);
   }
 
-  private drawRoomOutlines(s: GameState, v: ViewState) {
+  private drawRoomOutlines(s: GameState) {
     const ctx = this.ctx;
     ctx.lineWidth = 1.4;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const ri = LAYOUT.roomAt[idx(x, y)];
         if (ri < 0 || !LAYOUT.rooms[ri].ceiling) continue;
-        const col = complaintColor(s, ri, v.overlay === 'complaints' ? 0.8 : 0.45);
+        const col = complaintColor(s, ri, 0.45);
         ctx.strokeStyle = col;
         ctx.beginPath();
         if (y === 0 || LAYOUT.roomAt[idx(x, y - 1)] !== ri) {
@@ -1033,31 +1074,7 @@ export class Renderer {
           ctx.lineTo(isoX(x + 1, y + 1), isoY(x + 1, y + 1, 1));
         }
         ctx.stroke();
-        if (v.overlay === 'complaints') {
-          const c = s.rooms[ri].complaint;
-          if (c > 2) {
-            ctx.fillStyle = complaintColor(s, ri, Math.min(0.4, c / 220));
-            ctx.beginPath();
-            diamondPath(ctx, x, y, 1, 1, 1);
-            ctx.fill();
-          }
-        }
       }
-    }
-  }
-
-  private drawHeat(s: GameState, kind: 'noise' | 'smell') {
-    const ctx = this.ctx;
-    for (let i = 0; i < N; i++) {
-      const val = kind === 'noise' ? noiseField[i] / 3 : s.smell[i] / 60;
-      if (val < 0.03) continue;
-      const x = i % W;
-      const y = Math.floor(i / W);
-      const a = Math.min(0.7, val * 0.6);
-      ctx.fillStyle = kind === 'noise' ? `rgba(255,${Math.round(200 - Math.min(1, val) * 180)},40,${a})` : `rgba(120,230,60,${a})`;
-      ctx.beginPath();
-      diamondPath(ctx, x, y, 1, 1, 2);
-      ctx.fill();
     }
   }
 
@@ -1199,8 +1216,8 @@ export class Renderer {
         ctx.fillRect(px - w / 2 + 5, py + 7, w - 10, 3);
         ctx.fillStyle = complaintColor(s, ri, 1);
         ctx.fillRect(px - w / 2 + 5, py + 7, ((w - 10) * c) / 100, 3);
-        if (v.overlay === 'complaints') {
-          const mask = `NOISE ${Math.round(r.noiseMask * 100)} · SMELL ${Math.round(r.smellMask * 100)}`;
+        if (v.overlay === 'noise' || v.overlay === 'smell') {
+          const mask = v.overlay === 'noise' ? `NOISE COVER ${Math.round(r.noiseMask * 100)}%` : `SMELL COVER ${Math.round(r.smellMask * 100)}%`;
           ctx.font = `600 9px ${BODY_FONT}`;
           ctx.fillStyle = '#9fe0ff';
           ctx.fillText(mask, px, py + 19);
@@ -1209,7 +1226,7 @@ export class Renderer {
     });
   }
 
-  private drawInspectionZones(s: GameState, scanner: boolean, t: number) {
+  private drawInspectionZones(s: GameState, t: number) {
     const ctx = this.ctx;
     for (const ins of s.inspections) {
       const r = ins.radius;
@@ -1224,6 +1241,7 @@ export class Renderer {
       diamondPath(ctx, ins.x - r, ins.y - r, r * 2 + 1, r * 2 + 1, 3);
       ctx.fill();
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
       const px = isoX(ins.x + 0.5, ins.y + 0.5);
       const py = isoY(ins.x + 0.5, ins.y + 0.5, 40);
@@ -1237,10 +1255,10 @@ export class Renderer {
       ctx.fillStyle = '#fff';
       ctx.textBaseline = 'middle';
       ctx.fillText(label, px, py - 2);
-      if (!scanner && !active) {
+      if (!active) {
         ctx.font = `9px ${BODY_FONT}`;
         ctx.fillStyle = '#ffb0c0';
-        ctx.fillText('Move your stuff or plant a decoy raccoon', px, py + 12);
+        ctx.fillText(forecastLabel(forecastInspection(s, ins)), px, py + 12);
       }
     }
   }
@@ -1271,7 +1289,7 @@ export class Renderer {
       if (v.build !== 'deck') {
         ctx.save();
         ctx.globalAlpha = 0.7;
-        drawBuildable(ctx, v.build, x, y, t, { powered: true, inUse: false, alpha: 0.7 });
+        drawBuildable(ctx, v.build, x, y, t, { powered: true, inUse: false, alpha: 0.7, flip: v.flip && canRotate(v.build) });
         ctx.restore();
         const def = BUILD[v.build];
         const rad = def.radius ?? def.insulationRadius ?? (def.periscope ? 6 : def.fanRadius);
@@ -1314,6 +1332,9 @@ export function dragDeckError(s: GameState, x: number, y: number): string | null
   if (err === 'Must connect to your territory') return null;
   return err;
 }
+
+const bedUnder = (s: GameState, c: Crew) => s.objects.find((o) => o.id === c.bedId && o.x === Math.floor(c.x) && o.y === Math.floor(c.y));
+const sleepersIn = (s: GameState, bed: Placed) => s.crew.filter((c) => c.state === 'sleeping' && c.layer === 1 && bedUnder(s, c) === bed).length;
 
 export const crewSprite = (archetype: string) => `char.crew.${archetype}`;
 

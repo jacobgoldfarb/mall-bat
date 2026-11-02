@@ -84,6 +84,13 @@ export function alertLevel(alert: number): number {
   return lvl;
 }
 
+const BASE_ALERT_DECAY = { easy: 4, normal: 2.6, hard: 1.6 };
+export const CLEAN_NIGHT_DECAY = 1.5;
+
+export function alertDecay(s: GameState, cleanNight: boolean): number {
+  return BASE_ALERT_DECAY[s.difficulty] + (cleanNight ? CLEAN_NIGHT_DECAY : 0) + s.alert * 0.05;
+}
+
 const DIFF_ALERT = { easy: 0.7, normal: 1, hard: 1.3 };
 
 export function raiseAlert(s: GameState, amount: number, reason: string) {
@@ -120,13 +127,13 @@ export function unlock(s: GameState, id: string) {
 export const ACHIEVEMENTS: Record<string, { name: string; desc: string }> = {
   FIRST_NIGHT: { name: 'Home Sweet Plenum', desc: 'Bring home your first haul.' },
   WISHING_WELL: { name: 'Every Wish Has a Price', desc: 'Fish $100 out of the fountain.' },
-  RACCOONS: { name: 'It Was Raccoons', desc: 'Fool an inspection with a decoy raccoon.' },
+  RACCOONS: { name: 'It Was Raccoons', desc: 'Have an inspector blame your decoy raccoon.' },
   GARY: { name: "Gary's Friend", desc: "Earn Gary's trust." },
   POWERSELLER: { name: 'eBay Power Seller', desc: 'Sell 50 goods on eBay.' },
   BLACK_FRIDAY: { name: 'Doorbuster', desc: 'Earn $1,000 on Black Friday.' },
-  GHOST: { name: 'Ghost of the Galleria', desc: 'Go 10 nights in a row without being spotted.' },
-  FULL_HOUSE: { name: 'Full House', desc: 'Have 8 rats in your crew.' },
-  KING: { name: 'King of the Galleria', desc: 'Win the auction.' },
+  GHOST: { name: 'Ghost of Northgate', desc: 'Go 10 nights in a row without being spotted.' },
+  FULL_HOUSE: { name: 'Full House', desc: 'Have 8 Bats in your crew.' },
+  KING: { name: 'King of Northgate', desc: 'Win the auction.' },
   EVICTED: { name: 'Trespassed', desc: 'Get evicted.' },
   NOTHING: { name: 'Must Be the Pipes', desc: 'Have an inspection find nothing.' },
 };

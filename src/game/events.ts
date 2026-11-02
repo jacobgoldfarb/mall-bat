@@ -1,10 +1,12 @@
 import { ARCHETYPES, TRAITS } from './defs';
-import { addCrew, bedCapacity, makeCandidate } from './crew';
+import { BAIL_HOURS, addCrew, bedCapacity, makeCandidate } from './crew';
+import { resolveHijinx, startHijinx } from './hijinx';
 import { scheduleNear } from './inspect';
 import { LAYOUT } from './layout';
-import { auctionBid, earn, log, pa, phone, pushModal, rand, raiseAlert, sfx, unlock } from './ops';
+import { addMood } from './needs';
+import { auctionBid, earn, log, pa, phone, pushModal, rand, sfx, unlock } from './ops';
 import type { Candidate, GameState } from './state';
-import { AUCTION_DAY, dayOf, formatDate } from './time';
+import { AUCTION_DAY, dayOf, formatClock, formatDate } from './time';
 import { markDirty } from './world';
 
 export function offerCandidate(s: GameState, c: Candidate, intro: string) {
@@ -45,7 +47,11 @@ export function closeStore(s: GameState, id: string) {
   markDirty();
   const r = LAYOUT.rooms[ri];
   pa(s, r.closingLine ?? `${r.name} has closed its doors.`);
-  log(s, `${r.name} is now vacant: nobody is down there to hear you, but the power is cut. The auction bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', { x: Math.floor((r.x0 + r.x1) / 2), y: Math.floor((r.y0 + r.y1) / 2), layer: 1 });
+  log(s, `${r.name} is now vacant: nobody is down there to hear you, but the power is cut. The auction bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', {
+    x: Math.floor((r.x0 + r.x1) / 2),
+    y: Math.floor((r.y0 + r.y1) / 2),
+    layer: 1,
+  });
 }
 
 interface Scripted {
@@ -56,7 +62,7 @@ interface Scripted {
 }
 
 const SCRIPT: Scripted[] = [
-  { day: 1, hour: 10, key: 'welcome', run: (s) => pa(s, 'Good morning, shoppers! Welcome to Galleria Pointe, where the fun never ends.') },
+  { day: 1, hour: 10, key: 'welcome', run: (s) => pa(s, 'Good morning, shoppers! Welcome to Northgate Mall, where the fun never ends.') },
   {
     day: 2,
     hour: 11,
@@ -73,9 +79,9 @@ const SCRIPT: Scripted[] = [
     run: (s) => {
       s.flags.auctionKnown = 1;
       pushModal(s, {
-        title: 'GALLERIA POINTE IN FORECLOSURE',
+        title: 'NORTHGATE MALL IN FORECLOSURE',
         art: 'news',
-        body: `The Daily Ledger, page B4:\n\n"The owners of Galleria Pointe have defaulted on the mortgage. The property goes to public auction on Friday, December 31. Prestige Lifestyle Developers is expected to bid around $${auctionBid(s).toLocaleString()}. They plan to bulldoze it for luxury condos."\n\nYou read it twice. You look up at the ceiling.\n\nIf you have more cash than the developer on New Year's Eve, the mall is yours. Every store that closes before then drops their bid.`,
+        body: `The Daily Ledger, page B4:\n\n"The owners of Northgate Mall have defaulted on the mortgage. The property goes to public auction on Friday, December 31. Prestige Lifestyle Developers is expected to bid around $${auctionBid(s).toLocaleString()}. They plan to bulldoze it for luxury condos."\n\nYou read it twice. You look up at the ceiling.\n\nIf you have more cash than the developer on New Year's Eve, the mall is yours. Every store that closes before then drops their bid.`,
         choices: [{ label: "Then I'm buying a mall.", action: 'ok' }],
       });
     },
@@ -84,12 +90,23 @@ const SCRIPT: Scripted[] = [
     day: 6,
     hour: 23,
     key: 'garyIntro',
-    run: (s) => log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use a Cinnabomb. (Night job: Leave Gary a Cinnabomb.)', 'info'),
+    run: (s) =>
+      log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use a Cinnabomb. (Night job: Leave Gary a Cinnabomb.)', 'info'),
   },
   { day: 9, hour: 15, key: 'recruit2', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   { day: 12, hour: 9, key: 'closeSam', run: (s) => closeStore(s, 'samgroovy') },
   { day: 16, hour: 20, key: 'recruit3', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
-  { day: 21, hour: 7, key: 'grandma', run: (s) => offerCandidate(s, makeCandidate(s, 'grandma'), 'The Galleria Mallwalkers Club laps the concourse at 7 AM. One of them catches your eye, winks, and keeps walking. Later, she knocks on your ladder.') },
+  {
+    day: 21,
+    hour: 7,
+    key: 'grandma',
+    run: (s) =>
+      offerCandidate(
+        s,
+        makeCandidate(s, 'grandma'),
+        'The Northgate Mallwalkers Club laps the concourse at 7 AM. One of them catches your eye, winks, and keeps walking. Later, she knocks on your ladder.',
+      ),
+  },
   {
     day: 30,
     hour: 9,
@@ -98,7 +115,7 @@ const SCRIPT: Scripted[] = [
       s.flags.costumeDay = 30;
       s.crew.forEach((c) => (c.familiarity = 0));
       s.food += 12;
-      pa(s, 'Happy Halloween, Galleria Pointe! Costumes welcome all day. Trick-or-treating at participating stores 4 to 7 PM!');
+      pa(s, 'Happy Halloween, Northgate Mall! Costumes welcome all day. Trick-or-treating at participating stores 4 to 7 PM!');
       log(s, 'Halloween: everyone is in costume. Nobody recognizes anybody today. Your crew grabbed 12 food in candy.', 'good');
     },
   },
@@ -114,7 +131,17 @@ const SCRIPT: Scripted[] = [
     },
   },
   { day: 45, hour: 15, key: 'fire', run: (s) => scheduleNear(s, 'fire', 'Annual fire code inspection.', 2) },
-  { day: 48, hour: 12, key: 'santa', run: (s) => offerCandidate(s, makeCandidate(s, 'santa'), 'The new Mall Santa started today. The OLD Mall Santa is sitting in the food court, still in the suit, eating a pretzel and staring into the middle distance.') },
+  {
+    day: 48,
+    hour: 12,
+    key: 'santa',
+    run: (s) =>
+      offerCandidate(
+        s,
+        makeCandidate(s, 'santa'),
+        'The new Mall Santa started today. The OLD Mall Santa is sitting in the food court, still in the suit, eating a pretzel and staring into the middle distance.',
+      ),
+  },
   { day: 52, hour: 18, key: 'recruit5', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   {
     day: 55,
@@ -126,7 +153,7 @@ const SCRIPT: Scripted[] = [
         art: 'feast',
         body: "The mall is closed for Thanksgiving. The building is silent, except for Gary's radio playing the Lions game.\n\nThe crew is talking about family. Some have one. Some don't.",
         choices: [
-          { label: 'Throw a feast (10 food, big morale boost)', action: 'feast', disabled: s.food < 10 ? 'Needs 10 food' : undefined },
+          { label: 'Throw a feast (10 food, big mood boost)', action: 'feast', disabled: s.food < 10 ? 'Needs 10 food' : undefined },
           { label: 'Ramen as usual', action: 'ok' },
         ],
       }),
@@ -136,12 +163,12 @@ const SCRIPT: Scripted[] = [
     hour: 5,
     key: 'blackfriday',
     run: (s) => {
-      pa(s, 'BLACK FRIDAY! Doors are OPEN! Doorbusters at Dillman\'s and Searz! Please do not trample your fellow shoppers!');
+      pa(s, "BLACK FRIDAY! Doors are OPEN! Doorbusters at Dillman's and Searz! Please do not trample your fellow shoppers!");
       log(s, 'Black Friday: triple crowds, packed fountains, massive noise cover. Make money.', 'good');
     },
   },
   { day: 60, hour: 9, key: 'closeClaire', run: (s) => closeStore(s, 'claire') },
-  { day: 61, hour: 8, key: 'cold', run: (s) => log(s, "December. The ducts are freezing at night. Crew morale drops without a Space Heater.", 'warn') },
+  { day: 61, hour: 8, key: 'cold', run: (s) => log(s, 'December. The ducts are freezing at night. Mood drops without a Space Heater.', 'warn') },
   { day: 64, hour: 14, key: 'recruit6', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   {
     day: 70,
@@ -163,7 +190,7 @@ const SCRIPT: Scripted[] = [
     },
   },
   { day: 80, hour: 9, key: 'closeRadio', run: (s) => closeStore(s, 'radiohut') },
-  { day: 84, hour: 9, key: 'xmasEve', run: (s) => pa(s, 'Merry Christmas Eve from Galleria Pointe! We close at 6 PM. Get home safe, everyone.') },
+  { day: 84, hour: 9, key: 'xmasEve', run: (s) => pa(s, 'Merry Christmas Eve from Northgate Mall! We close at 6 PM. Get home safe, everyone.') },
   {
     day: 85,
     hour: 19,
@@ -173,16 +200,21 @@ const SCRIPT: Scripted[] = [
       pushModal(s, {
         title: 'Gary, Alone on Christmas',
         art: 'gary',
-        body: "The mall is closed for Christmas. Through a loose ceiling tile you can see Gary in the Security Office, eating a microwave turkey dinner and watching A Christmas Story on a 9-inch TV.\n\nHe raises his fork to nobody. \"Merry Christmas.\"",
+        body: 'The mall is closed for Christmas. Through a loose ceiling tile you can see Gary in the Security Office, eating a microwave turkey dinner and watching A Christmas Story on a 9-inch TV.\n\nHe raises his fork to nobody. "Merry Christmas."',
         choices: [
           { label: 'Leave him a real Christmas dinner (5 food)', action: 'xmasgary', disabled: s.food < 5 ? 'Needs 5 food' : undefined },
-          { label: "Leave him be", action: 'ok' },
+          { label: 'Leave him be', action: 'ok' },
         ],
       });
     },
   },
   { day: 86, hour: 8, key: 'boxing', run: (s) => pa(s, 'Happy Boxing Day! Our Returns & Exchanges desks are open early!') },
-  { day: 88, hour: 9, key: 'final', run: (s) => log(s, `Three days until the auction. Developer bid: $${auctionBid(s).toLocaleString()}. Your cash: $${Math.floor(s.cash).toLocaleString()}.`, 'warn') },
+  {
+    day: 88,
+    hour: 9,
+    key: 'final',
+    run: (s) => log(s, `Three days until the auction. Developer bid: $${auctionBid(s).toLocaleString()}. Your cash: $${Math.floor(s.cash).toLocaleString()}.`, 'warn'),
+  },
   { day: AUCTION_DAY, hour: 12, key: 'auctionDay', run: (s) => resolveAuction(s) },
 ];
 
@@ -202,35 +234,24 @@ export function resolveAuction(s: GameState) {
     unlock(s, 'KING');
     s.over = {
       won: true,
-      title: 'KING OF THE GALLERIA',
-      text: `The auctioneer squints at the shoebox full of fountain quarters, Cinnabomb receipts, and eBay PayPal printouts.\n\n"Sold, for $${Math.floor(s.cash).toLocaleString()}, to... the ceiling people?"\n\nPrestige Lifestyle Developers bid $${bid.toLocaleString()}. You beat them by $${Math.floor(s.cash - bid).toLocaleString()}.\n\nGalleria Pointe is yours. Your crew climbs down the ladder for the last time, and walks out the front doors in broad daylight.`,
+      title: 'KING OF NORTHGATE',
+      text: `The auctioneer squints at the shoebox full of fountain quarters, Cinnabomb receipts, and eBay PayPal printouts.\n\n"Sold, for $${Math.floor(s.cash).toLocaleString()}, to... the ceiling people?"\n\nPrestige Lifestyle Developers bid $${bid.toLocaleString()}. You beat them by $${Math.floor(s.cash - bid).toLocaleString()}.\n\nNorthgate Mall is yours. Your crew climbs down the ladder for the last time, and walks out the front doors in broad daylight.`,
     };
   } else {
     s.over = {
       won: false,
       title: 'SOLD TO THE DEVELOPER',
-      text: `Prestige Lifestyle Developers bought Galleria Pointe for $${bid.toLocaleString()}. You had $${Math.floor(s.cash).toLocaleString()}.\n\nThe bulldozers come in March. On the last night, your crew sits on the plywood, listening to the muzak one more time. It sounds slower than it used to.`,
+      text: `Prestige Lifestyle Developers bought Northgate Mall for $${bid.toLocaleString()}. You had $${Math.floor(s.cash).toLocaleString()}.\n\nThe bulldozers come in March. On the last night, your crew sits on the plywood, listening to the muzak one more time. It sounds slower than it used to.`,
     };
   }
 }
 
-const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: number) => boolean; run: (s: GameState) => void }[] = [
+const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: number) => boolean; run: (s: GameState, hour: number) => void }[] = [
   {
-    key: 'wallet',
-    weight: 2,
+    key: 'hijinx',
+    weight: 2.5,
     when: (s) => s.crew.length > 0,
-    run: (s) => {
-      const c = rand.pick(s.crew);
-      pushModal(s, {
-        title: 'A Wallet Under the Bench',
-        art: 'wallet',
-        body: `${c.name} found a velcro wallet under a bench. Inside: $40, a Blockbuster card, and a Polaroid of somebody's dog.`,
-        choices: [
-          { label: 'Keep the $40', action: 'wallet_keep' },
-          { label: 'Turn it in to Lost & Found (Alert -3, morale +)', action: 'wallet_return' },
-        ],
-      });
-    },
+    run: (s, hour) => startHijinx(s, hour),
   },
   {
     key: 'raccoon',
@@ -310,7 +331,7 @@ export function randomHourly(s: GameState, hour: number) {
     roll -= e.weight;
     if (roll <= 0) {
       s.flags[`rnd_${e.key}`] = dayOf(s.time);
-      e.run(s);
+      e.run(s, hour);
       return;
     }
   }
@@ -354,8 +375,8 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
       const c = s.crew.find((x) => x.id === Number(a));
       if (!c) return;
       s.cash -= Number(b);
-      c.awayUntil = s.time + 2 * 1440;
-      log(s, `You posted bail for ${c.name}. They'll sneak back in two days.`, 'info');
+      c.awayUntil = s.time + BAIL_HOURS * 60;
+      log(s, `You posted bail for ${c.name}. They're released and will sneak back up the ladder around ${formatClock(c.awayUntil)}.`, 'info');
       return;
     }
     case 'wait': {
@@ -374,18 +395,12 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
     }
     case 'feast':
       s.food -= 10;
-      s.crew.forEach((c) => (c.morale = Math.min(100, c.morale + 25)));
+      addMood(s, 25);
       log(s, 'A Thanksgiving feast of food court leftovers, served on a plywood table. Best night in the ceiling yet.', 'good');
       sfx('good');
       return;
-    case 'wallet_keep':
-      earn(s, 40);
-      sfx('cash');
-      return;
-    case 'wallet_return':
-      raiseAlert(s, -3, 'good deed');
-      s.crew.forEach((c) => (c.morale = Math.min(100, c.morale + 4)));
-      log(s, 'Turned in the wallet. Gary was touched. Things feel a bit lighter.', 'good');
+    case 'hijinx':
+      resolveHijinx(s, a, Number(b), Number(action.split(':')[3]));
       return;
     case 'xmasgary':
       s.food -= 5;
@@ -399,7 +414,7 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
       const g = addCrew(s, makeCandidate(s, 'gary'));
       for (const n of s.npcs) if (n.isGary) n.state = 'offduty';
       log(s, `${g.name} turned in his badge and climbed the ladder. "So THIS is where the extension cords went."`, 'good');
-      pa(s, 'Please welcome Officer Kowalski to the Galleria Pointe night security team.');
+      pa(s, 'Please welcome Officer Kowalski to the Northgate Mall night security team.');
       return;
     }
     case 'gary_insider':

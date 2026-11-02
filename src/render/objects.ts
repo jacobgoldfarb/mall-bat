@@ -342,21 +342,27 @@ function steam(ctx: Ctx, x: number, y: number, t: number) {
 function spliceSparks(ctx: Ctx, x: number, y: number, t: number) {
   if (Math.sin(t * 1.7 + x * 5) <= 0.93) return;
   ctx.fillStyle = '#fff6a0';
-  for (let i = 0; i < 4; i++) ctx.fillRect(cx(x, y) + (Math.random() - 0.5) * 8, cy(x, y, 8) + (Math.random() - 0.5) * 6, 1.5, 1.5);
+  const frame = Math.floor(t) * 8;
+  for (let i = 0; i < 4; i++) ctx.fillRect(cx(x, y) + (hash2(x, y, frame + i) - 0.5) * 8, cy(x, y, 8) + (hash2(y, x, frame + i) - 0.5) * 6, 1.5, 1.5);
 }
 
-function weldSparks(ctx: Ctx, x: number, y: number) {
+function weldSparks(ctx: Ctx, x: number, y: number, t: number) {
   ctx.fillStyle = '#fff6a0';
+  const frame = Math.floor(t) * 8;
   for (let i = 0; i < 6; i++) {
-    const a = Math.random() * Math.PI * 2;
-    ctx.fillRect(cx(x, y) + Math.cos(a) * Math.random() * 10, cy(x, y, 16) + Math.sin(a) * Math.random() * 6, 1.5, 1.5);
+    const a = hash2(x, y, frame + i) * Math.PI * 2;
+    const r = hash2(y, x, frame + i);
+    ctx.fillRect(cx(x, y) + Math.cos(a) * r * 10, cy(x, y, 16) + Math.sin(a) * r * 6, 1.5, 1.5);
   }
 }
 
 type Glow = (color: string, z: number, r?: number) => void;
 
-function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: number, powered: boolean, inUse: boolean, glow: Glow) {
+function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: number, powered: boolean, inUse: boolean, glow: Glow, alert: boolean) {
   switch (type) {
+    case 'siphon':
+      if (alert && Math.sin(t * 2.4 + x) > 0) glow('#ff2d55', 18, 5);
+      return;
     case 'splice':
       if (powered) spliceSparks(ctx, x, y, t);
       return;
@@ -365,7 +371,7 @@ function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: numb
       return;
     case 'workbench':
       if (inUse) {
-        weldSparks(ctx, x, y);
+        weldSparks(ctx, x, y, t);
         glow('#fff0b0', 16, 14);
       }
       return;
@@ -389,7 +395,24 @@ function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: numb
   }
 }
 
-export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: number, opts: { powered: boolean; inUse: boolean; alpha?: number }) {
+export function sleeperSprite(type: BuildId, sleepers: number): string | null {
+  const id = sleepers >= 2 && hasProp(`build.${type}.sleeper2`) ? `build.${type}.sleeper2` : `build.${type}.sleeper`;
+  return sleepers > 0 && hasProp(id) ? id : null;
+}
+
+export function drawFloorSleeper(ctx: Ctx, x: number, y: number) {
+  return !!drawPropSprite(ctx, "build.floor_sleeper", x - 0.5, y - 0.5);
+}
+
+export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: number, opts: { powered: boolean; inUse: boolean; alpha?: number; flip?: boolean; alert?: boolean; sleepers?: number }) {
+  if (opts.flip) {
+    ctx.save();
+    ctx.translate(cx(x, y) * 2, 0);
+    ctx.scale(-1, 1);
+    drawBuildable(ctx, type, x, y, t, { ...opts, flip: false });
+    ctx.restore();
+    return;
+  }
   const { powered, inUse } = opts;
   const glow: Glow = (c, z, r = 8) => {
     if (!powered) return;
@@ -402,8 +425,9 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
     ctx.fillRect(cx(x, y) - r, cy(x, y, z) - r, r * 2, r * 2);
     ctx.restore();
   };
-  if (type !== 'deck' && drawPropSprite(ctx, `build.${type}`, x, y, { seed: Math.floor(hash2(x, y) * 4), dim: !!BUILD[type].power && !powered })) {
-    buildableEffects(ctx, type, x, y, t, powered, inUse, glow);
+  const sprite = sleeperSprite(type, opts.sleepers ?? 0) ?? `build.${type}`;
+  if (type !== 'deck' && drawPropSprite(ctx, sprite, x, y, { seed: Math.floor(hash2(x, y) * 4), dim: !!BUILD[type].power && !powered })) {
+    buildableEffects(ctx, type, x, y, t, powered, inUse, glow, !!opts.alert);
     return;
   }
   switch (type) {
@@ -530,7 +554,7 @@ export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: 
       rectBox(ctx, x - 0.2, y, 0.25, 0.2, 5, '#c84b3a', 12);
       rectBox(ctx, x + 0.2, y, 0.15, 0.3, 3, '#888', 12);
       if (inUse) {
-        weldSparks(ctx, x, y);
+        weldSparks(ctx, x, y, t);
         glow('#fff0b0', 16, 14);
       }
       return;

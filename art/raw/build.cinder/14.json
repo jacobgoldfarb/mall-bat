@@ -1,0 +1,12 @@
+{
+  "prompt": "one tile tall pillar section of a pale gray cinderblock wall, four courses of stacked concrete blocks, uneven hand troweled mortar lines, flat top, half again as tall as it is wide, one block with a slightly chipped corner, no markings. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text, scavenged, makeshift, lived-in",
+  "seed": 509004670,
+  "width": 64,
+  "height": 80,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

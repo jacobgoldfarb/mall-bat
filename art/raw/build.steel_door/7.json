@@ -1,0 +1,12 @@
+{
+  "prompt": "one tile cube section of gray cinderblock wall with a small dull steel utility access door set into the front face, flat top, a yellow stenciled warning stripe and a cheap padlock. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text, scavenged, makeshift, lived-in",
+  "seed": 761576304,
+  "width": 128,
+  "height": 160,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

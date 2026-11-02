@@ -1,8 +1,10 @@
-import { app, refresh, selectBuild, toast, SPEEDS } from './app';
+import { app, refresh, selectBuild, selectObject, toast, SPEEDS } from './app';
 import { audio } from './audio/audio';
+import { shiftNow } from './game/crew';
 import { BUILD } from './game/defs';
+import { openJobs } from './ui/jobs';
 import { LAYOUT, idx, inBounds } from './game/layout';
-import { demolishAt, placeObject } from './game/sim';
+import { demolishAt, placeObject, rotateObject } from './game/sim';
 import { getDerived } from './game/world';
 
 const keys = new Set<string>();
@@ -87,16 +89,16 @@ export function attachInput(canvas: HTMLCanvasElement) {
     if (crew !== null) {
       app.view.selectedCrew = crew;
       app.crewExpanded = crew;
-      app.selectedObj = null;
+      selectObject(null);
       audio.play('click');
       refresh();
       return;
     }
     if (app.view.layer === 1 && inBounds(t.x, t.y)) {
       const obj = getDerived(app.state).objAt.get(idx(t.x, t.y));
-      app.selectedObj = obj ? obj.id : null;
+      selectObject(obj ? obj.id : null);
       if (obj) audio.play('click');
-    } else app.selectedObj = null;
+    } else selectObject(null);
     app.view.selectedCrew = null;
     refresh();
   });
@@ -131,7 +133,7 @@ export function attachInput(canvas: HTMLCanvasElement) {
           selectBuild(null);
         } else {
           app.view.selectedCrew = null;
-          app.selectedObj = null;
+          selectObject(null);
           refresh();
         }
       }
@@ -145,7 +147,7 @@ export function attachInput(canvas: HTMLCanvasElement) {
       const draggable = app.view.build === 'deck' || app.view.build === 'foam';
       if (draggable) placeRect(start.x, start.y, t.x, t.y);
       else {
-        const err = placeObject(app.state, app.view.build, t.x, t.y);
+        const err = placeObject(app.state, app.view.build, t.x, t.y, app.view.flip);
         if (err) {
           toast(err, 'bad');
           audio.play('bad');
@@ -202,7 +204,7 @@ export function attachInput(canvas: HTMLCanvasElement) {
         if (app.view.build || app.view.demolish) selectBuild(null);
         else if (app.view.selectedCrew !== null || app.selectedObj !== null) {
           app.view.selectedCrew = null;
-          app.selectedObj = null;
+          selectObject(null);
         } else app.menu = app.menu === 'none' ? 'pause' : 'none';
         break;
       case 'b':
@@ -217,9 +219,9 @@ export function attachInput(canvas: HTMLCanvasElement) {
         break;
       case 'o':
       case 'O': {
-        const order = ['none', 'complaints', 'noise', 'smell', 'power'] as const;
+        const order = ['none', 'noise', 'smell', 'power'] as const;
         app.view.overlay = order[(order.indexOf(app.view.overlay) + 1) % order.length];
-        app.view.layer = 1;
+        if (app.view.overlay === 'power') app.view.layer = 1;
         break;
       }
       case 'Alt':
@@ -235,6 +237,18 @@ export function attachInput(canvas: HTMLCanvasElement) {
         }
         break;
       }
+      case 'r':
+      case 'R': {
+        const obj = app.state.objects.find((o) => o.id === app.selectedObj);
+        if (app.view.build) app.view.flip = !app.view.flip;
+        else if (obj) rotateObject(obj);
+        break;
+      }
+      case 'j':
+      case 'J':
+        if (app.menu === 'jobs') app.menu = 'none';
+        else if (app.menu === 'none') openJobs(app.view.selectedCrew ?? app.crewExpanded, shiftNow(app.state) ?? undefined);
+        break;
       case 'h':
       case 'H':
         app.renderer!.centerOn(LAYOUT.hatch.x + 0.5, LAYOUT.hatch.y + 0.5);

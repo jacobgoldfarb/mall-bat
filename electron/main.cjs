@@ -28,7 +28,7 @@ function createWindow() {
     minWidth: 1180,
     minHeight: 720,
     backgroundColor: '#0b0a14',
-    title: 'Drop Ceiling',
+    title: 'Mall Bats',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

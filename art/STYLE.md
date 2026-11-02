@@ -1,10 +1,10 @@
-# Drop Ceiling — Art Style Guide
+# Mall Bats — Art Style Guide
 
 **One line:** a dying 2004 shopping mall drawn like a cozy late-era SNES/GBA isometric sim — warm, slightly shabby, a little ridiculous.
 
 ## Pillars
 
-1. **Mall nostalgia, not mall glamour.** Galleria Pointe peaked in 1996. Teal and mauve, brass trim, terrazzo, fake palms, fluorescent hum. Everything is a little scuffed, faded, taped up.
+1. **Mall nostalgia, not mall glamour.** Northgate Mall peaked in 1996. Teal and mauve, brass trim, terrazzo, fake palms, fluorescent hum. Everything is a little scuffed, faded, taped up.
 2. **One joke per object.** Every prop carries a small storytelling detail: gum under the bench, a "SALE" sticker peeling off, duct tape on the cooler, a Furby wedged in the toy bin, a Dave Matthews Band sticker on the mini-fridge. Detail is a wink, not clutter.
 3. **Two worlds, one palette.** The mall floor is bright, clean-ish and corporate. The ceiling is the squatters' world: plywood, extension cords, salvaged junk, warm lamp light. Same palette, different temperature.
 4. **Readable at a glance.** Silhouette first. A player at 1x zoom must tell a vending machine from an arcade cabinet from a payphone in one look.
@@ -36,7 +36,7 @@
 
 ## Color language
 
-- **Mall teal `#2aa6a0` + bubblegum `#dc348c`** are the brand of Galleria Pointe: fountain, court, food court, kiosks.
+- **Mall teal `#2aa6a0` + bubblegum `#dc348c`** are the brand of Northgate Mall: fountain, court, food court, kiosks.
 - **Warm neutrals** (terrazzo, plaster) for public space; **steel/concrete** for back-of-house.
 - **Neons** (`#2bfff0`, `#ff2bd6`, `#c6ff2b`) are reserved for things that glow: arcade, blacklight, screens, lava lamps.
 - **Wood/cardboard** dominates the ceiling: plywood decks, milk crates, boxes.
@@ -48,7 +48,7 @@
 
 The HUD reads as mall signage: dark plum backlit panels, teal header bars with the magenta + gold "mall stripe" underneath.
 
-- **Fonts** (self-hosted via `@fontsource`, CSP blocks remote fonts): `Jersey 10` for headings, names and big numbers; `Pixelify Sans` for body copy; `Silkscreen` 8px for tiny all-caps labels and key hints; `VT323` for LED readouts (clock, log timestamps). Canvas text uses `BODY_FONT` / `DISPLAY_FONT` from `src/render/draw.ts`.
+- **Fonts** (self-hosted via `@fontsource`, CSP blocks remote fonts): `Jersey 10` for headings, names and big numbers; `Pixelify Sans` for body copy; `VT323` for all-caps labels, key hints and LED readouts (clock, log timestamps), at 12px or larger so 8 and 2 stay legible. Canvas text uses `BODY_FONT` / `DISPLAY_FONT` from `src/render/draw.ts`.
 - **Shapes**: no rounded corners or gradients-as-gloss. Panels and buttons use the notched pixel outline (`--outline`, `--outline-3`), a 2px top highlight, a darker bottom edge, and a hard offset drop shadow.
 - **Buttons**: `.btn` is teal, `.on` magenta, `.danger` red, `.ghost` plum. Show hotkeys with `<kbd>`.
 - **Icons**: no emoji. Use `icon.*` assets via `<Icon name>` (`src/ui/icons.tsx`), 32px native (16px for inline); modal art is 64px shown at 128px.

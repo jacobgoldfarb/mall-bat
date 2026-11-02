@@ -34,7 +34,6 @@ export type CrewState =
   | 'toHome'
   | 'sleeping'
   | 'eating'
-  | 'toEat'
   | 'leisure'
   | 'toLeisure'
   | 'toBed'
@@ -59,11 +58,12 @@ export interface Crew extends Agent {
   handy: number;
   traits: TraitId[];
   energy: number;
-  hunger: number;
-  morale: number;
   familiarity: number;
   dayJob: JobId;
   nightJob: JobId;
+  fillIn: boolean;
+  activeJob: JobId;
+  jobCooldown: Partial<Record<JobId, number>>;
   state: CrewState;
   timer: number;
   workTimer: number;
@@ -73,11 +73,9 @@ export interface Crew extends Agent {
   bedId: number;
   bannedUntil: number;
   awayUntil: number;
-  miserable: number;
   joinedDay: number;
   earned: number;
   thought: string;
-  hotMeal: boolean;
   spottedBy: number;
   waitUntil: number;
   recall: boolean;
@@ -113,6 +111,8 @@ export interface Placed {
   tapRoom: number;
   usedUntil: number;
   supplyLoad: number;
+  flipped?: boolean;
+  jammed?: boolean;
 }
 
 export type InspectionKind = 'complaint' | 'power' | 'pest' | 'fire' | 'sweep';
@@ -217,6 +217,10 @@ export interface GameState {
   food: number;
   parts: number;
   goods: number;
+  mood: number;
+  missedMeals: number;
+  miserable: number;
+  excuseFatigue: number;
   totalEarned: number;
   alert: number;
   mallHealth: number;

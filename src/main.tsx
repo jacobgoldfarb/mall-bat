@@ -15,7 +15,6 @@ import { App, startGame } from './ui/App';
 import '@fontsource/pixelify-sans/latin-400.css';
 import '@fontsource/pixelify-sans/latin-600.css';
 import '@fontsource/jersey-10/latin-400.css';
-import '@fontsource/silkscreen/latin-400.css';
 import '@fontsource/vt323/latin-400.css';
 import './ui/styles.css';
 
@@ -58,6 +57,7 @@ function makeDemo() {
 let lastAutosaveDay = -1;
 let last = performance.now();
 let titleT = 0;
+let animationClock = 0;
 
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
@@ -79,9 +79,12 @@ function frame(now: number) {
   } else if (app.state) {
     const s = app.state;
     const running = !app.paused && app.menu === 'none' && !s.modals.length && !s.over;
-    if (running) tick(s, dt * MINUTES_PER_SECOND * app.speed);
+    if (running) {
+      tick(s, dt * MINUTES_PER_SECOND * app.speed);
+      animationClock += (dt * 1000) / 33;
+    }
     renderer.clampCamera();
-    renderer.draw(s, app.view, now / 33);
+    renderer.draw(s, app.view, animationClock);
 
     while (sfxQueue.length) audio.play(sfxQueue.shift()!);
     while (noticeQueue.length) {

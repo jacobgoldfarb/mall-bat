@@ -103,7 +103,7 @@ function Review() {
   return (
     <main>
       <header>
-        <h1>Drop Ceiling · Art Review</h1>
+        <h1>Mall Bats · Art Review</h1>
         <span>
           {picked}/{ASSETS.length} picked
         </span>

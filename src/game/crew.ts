@@ -1,5 +1,6 @@
-import { ARCHETYPES, FIRST_NAMES, JOB, RANKS, type JobId, type Stat } from './defs';
+import { ARCHETYPES, FIRST_NAMES, JOB, JOBS, RANKS, type JobDef, type JobId } from './defs';
 import { LAYOUT, N, W, idx } from './layout';
+import { addSharedMood, workMult } from './needs';
 import { earn, log, rand, rankOf, raiseAlert, sfx, unlock } from './ops';
 import type { Agent, Candidate, Crew, GameState, Look } from './state';
 import { dayOf, phaseAt, seasonFactor, hourCurve, minuteOfDay, md } from './time';
@@ -72,11 +73,12 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     handy: c.handy,
     traits: c.traits,
     energy: 75,
-    hunger: 70,
-    morale: 60,
     familiarity: 0,
     dayJob: 'rest',
     nightJob: 'rest',
+    fillIn: false,
+    activeJob: 'rest',
+    jobCooldown: {},
     state: 'idle',
     timer: 0,
     workTimer: 0,
@@ -86,11 +88,9 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     bedId: -1,
     bannedUntil: 0,
     awayUntil: 0,
-    miserable: 0,
     joinedDay: dayOf(s.time),
     earned: 0,
     thought: 'Settling in',
-    hotMeal: false,
     spottedBy: -1,
     waitUntil: 0,
     recall: false,
@@ -104,11 +104,6 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
 }
 
 export const has = (c: Crew, t: string) => c.traits.includes(t as never);
-
-export function statMult(c: Crew, stat: Stat): number {
-  const v = c[stat];
-  return (0.6 + 0.2 * v) * (c.morale < 30 ? 0.7 : 1);
-}
 
 export function crewSpeed(c: Crew): number {
   return 0.34 * (has(c, 'quick') ? 1.25 : 1) * (c.energy < 15 ? 0.75 : 1);
@@ -170,17 +165,42 @@ export function goTo(s: GameState, a: Agent, goals: number[] | ((n: number) => b
   return true;
 }
 
-function shiftNow(s: GameState): 'day' | 'night' | null {
+export function shiftNow(s: GameState): 'day' | 'night' | null {
   const p = phaseAt(s.time);
   return p === 'open' ? 'day' : p === 'night' ? 'night' : null;
 }
 
-export function currentJob(s: GameState, c: Crew): JobId {
+export function assignedJob(s: GameState, c: Crew): JobId {
   const sh = shiftNow(s);
-  const job = sh === 'day' ? c.dayJob : sh === 'night' ? c.nightJob : 'rest';
-  if (job === 'tinker') return job;
-  if (JOB[job].shift !== 'both' && JOB[job].shift !== sh) return 'rest';
-  return job;
+  return sh === 'day' ? c.dayJob : sh === 'night' ? c.nightJob : 'rest';
+}
+
+const SAFE_ENOUGH_TO_FILL_IN: Record<'day' | 'night', JobDef['risk'][]> = { day: ['none', 'low'], night: ['none'] };
+const NEVER_FILL_IN: JobId[] = ['rest', 'gary', 'boundaries'];
+
+export function fillInJob(s: GameState, c: Crew): JobId {
+  const sh = shiftNow(s);
+  if (!sh) return 'rest';
+  const open = JOBS.filter((j) => (j.shift === sh || j.shift === 'both') && SAFE_ENOUGH_TO_FILL_IN[sh].includes(j.risk) && !NEVER_FILL_IN.includes(j.id) && !jobUnavailable(s, c, j.id));
+  const score = (j: JobDef) => c[j.stat] + (j.risk === 'none' ? 1 : 0);
+  return open.sort((a, b) => score(b) - score(a))[0]?.id ?? 'rest';
+}
+
+export function jobUnavailable(s: GameState, c: Crew, job: JobId): string | null {
+  if (job !== 'tinker' && c.waitUntil > s.time) return 'Lying low after being spotted';
+  if ((c.jobCooldown[job] ?? 0) > s.time) return "Can't get there right now";
+  return jobBlocked(s, c, job);
+}
+
+export function planJob(s: GameState, c: Crew): JobId {
+  const job = assignedJob(s, c);
+  if (job === 'rest' || !jobUnavailable(s, c, job)) return job;
+  return c.fillIn ? fillInJob(s, c) : 'rest';
+}
+
+export function currentJob(s: GameState, c: Crew): JobId {
+  const committed = (c.state === 'toWork' || c.state === 'working') && (c.activeJob === assignedJob(s, c) || c.fillIn);
+  return committed ? c.activeJob : planJob(s, c);
 }
 
 export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
@@ -202,6 +222,7 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
       break;
     case 'tinker':
       if (!d.workbenches.length) return 'Needs a powered Workbench';
+      if (!jobTarget(s, c, 'tinker')) return `Every Workbench is taken (1 Bat each, you have ${d.workbenches.length})`;
       if (s.parts < 2) return 'Needs 2 parts';
       if (s.goods >= d.goodsCap) return 'Goods storage full';
       break;
@@ -233,7 +254,7 @@ export const POOL_OF: Partial<Record<JobId, string>> = {
 
 const nightKey = (s: GameState) => dayOf(s.time - 360);
 
-function jobTarget(s: GameState, c: Crew, job: JobId): number[] | null {
+export function jobTarget(s: GameState, c: Crew, job: JobId): number[] | null {
   const def = JOB[job];
   if (job === 'tinker') {
     const benches = getDerived(s).workbenches.filter((b) => !s.crew.some((o) => o !== c && o.useObj === b.id && o.state === 'working'));
@@ -299,7 +320,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
   const boxingDay = m === 12 && d === 26;
   switch (job) {
     case 'fountain': {
-      const got = Math.round(take('fountain', (2.5 + c.handy * 1.2) * rand.range(0.7, 1.3) * (c.morale < 30 ? 0.7 : 1)));
+      const got = Math.round(take('fountain', (2.5 + c.handy * 1.2) * rand.range(0.7, 1.3)));
       k.cash += got;
       s.stats.fountainCash += got;
       if (s.stats.fountainCash >= 100) unlock(s, 'WISHING_WELL');
@@ -321,7 +342,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     case 'arcade': {
       const got = Math.round(take('arcade', (3 + c.handy * 1.6) * rand.range(0.8, 1.2)));
       k.cash += got;
-      shrinkage('funzone', 0.15);
+      shrinkage('funzone', 0.1);
       if (got) c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       sfx('coin');
       return got > 0;
@@ -329,7 +350,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     case 'radiohut': {
       const got = take('radiohut', c.handy >= 4 ? 2 : 1);
       k.parts += got;
-      shrinkage('radiohut', 0.35 * got);
+      shrinkage('radiohut', 0.24 * got);
       return got > 0;
     }
     case 'pallets': {
@@ -340,7 +361,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       const got = take('stockroom', 1);
       if (rand.chance(0.2)) k.goods += got;
       else k.parts += got;
-      if (got) raiseAlert(s, 0.12 * stealthy, 'Stockroom counts are off');
+      if (got) raiseAlert(s, 0.08 * stealthy, 'Stockroom counts are off');
       return (s.pools.stockroom ?? 0) > 0;
     }
     case 'lostfound': {
@@ -349,7 +370,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       if (r < 0.4) k.goods += 1;
       else if (r < 0.7) k.cash += rand.int(20, 90);
       else if (r < 0.85) k.parts += 2;
-      raiseAlert(s, 0.8, 'Lost & Found items missing');
+      raiseAlert(s, 0.55, 'Lost & Found items missing');
       return (s.pools.lostfound ?? 0) > 0;
     }
     case 'gary': {
@@ -373,7 +394,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return got > 0;
     }
     case 'boundaries': {
-      c.morale = Math.min(100, c.morale + 5);
+      addSharedMood(s, 5);
       return true;
     }
     case 'returns': {
@@ -417,11 +438,14 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
   return false;
 }
 
-function cycleLength(c: Crew, job: JobId): number {
-  const def = JOB[job];
-  let len = def.cycle;
+export function baseCycle(s: GameState, c: Crew, job: JobId): number {
+  let len = JOB[job].cycle;
   if (job === 'tinker') len = len / (0.6 + c.handy * 0.2) / (has(c, 'gearhead') ? 1.5 : 1);
-  return len * rand.range(0.85, 1.15);
+  return len / workMult(s);
+}
+
+function cycleLength(s: GameState, c: Crew, job: JobId): number {
+  return baseCycle(s, c, job) * rand.range(0.85, 1.15);
 }
 
 let zoneState: GameState | null = null;
@@ -478,24 +502,19 @@ function inActiveZone(s: GameState, x: number, y: number): boolean {
 }
 
 function decide(s: GameState, c: Crew) {
-  const job = currentJob(s, c);
-  const lyingLow = c.waitUntil > s.time && job !== 'tinker';
-  const blocked = job === 'rest' ? 'rest' : lyingLow ? 'lying low' : jobBlocked(s, c, job);
-  const canWork = !blocked && c.energy > 15;
+  const job = planJob(s, c);
+  const canWork = job !== 'rest' && c.energy > 15;
   const phase = phaseAt(s.time);
-
-  if (c.hunger < 30 && s.food <= 0 && s.cash >= 4) {
-    s.cash -= 4;
-    c.hunger = Math.min(100, c.hunger + 45);
-    setThought(c, "Bought a slice at Sbarrito's ($4)");
-  }
 
   if (c.layer === 0) {
     if (canWork) startWork(s, c, job);
-    else startHome(s, c, blocked && blocked !== 'rest' ? `Heading home (${blocked.toLowerCase()})` : 'Heading home');
+    else {
+      const assigned = assignedJob(s, c);
+      const why = assigned !== 'rest' && jobUnavailable(s, c, assigned);
+      startHome(s, c, why ? `Heading home (${why.toLowerCase()})` : 'Heading home');
+    }
     return;
   }
-  if (c.hunger < 40 && s.food > 0) return startEat(s, c);
   if (canWork) return startWork(s, c, job);
   const sleepy = c.energy < 40 || (phase === 'night' && c.energy < 92) || (phase !== 'open' && c.energy < 70);
   if (sleepy) return startSleep(s, c);
@@ -505,27 +524,15 @@ function decide(s: GameState, c: Crew) {
 function startWork(s: GameState, c: Crew, job: JobId) {
   const targets = jobTarget(s, c, job);
   if (!targets || !goTo(s, c, targets)) {
+    c.jobCooldown[job] = s.time + 45;
     setThought(c, `Can't reach ${JOB[job].name}`);
     c.state = 'idle';
-    c.timer = 20;
+    c.timer = 2;
     return;
   }
+  c.activeJob = job;
   c.state = 'toWork';
   setThought(c, `Off to ${JOB[job].name}`);
-}
-
-function startEat(s: GameState, c: Crew) {
-  const plates = getDerived(s).hotPlates;
-  if (plates.length && goTo(s, c, plates.map((p) => nodeOf(1, p.x, p.y)))) {
-    c.state = 'toEat';
-    c.hotMeal = true;
-    setThought(c, 'Cooking ramen');
-    return;
-  }
-  c.state = 'eating';
-  c.hotMeal = false;
-  c.timer = 15;
-  setThought(c, 'Eating cold leftovers');
 }
 
 function startSleep(s: GameState, c: Crew) {
@@ -588,8 +595,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     if (!night && has(c, 'earlybird')) drain *= 0.6;
     c.energy = Math.max(0, c.energy - (drain * dt) / 60);
   }
-  c.hunger = Math.max(0, c.hunger - (3.4 * (has(c, 'glutton') ? 1.5 : 1) * dt) / 60);
-  if (c.hunger <= 0) c.energy = Math.max(0, c.energy - (3 * dt) / 60);
+  if (s.missedMeals > 0) c.energy = Math.max(0, c.energy - (3 * dt) / 60);
 
   const prevLayer = c.layer;
   if (c.state === 'fleeing') {
@@ -647,7 +653,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     }
   } else c.hiding = false;
 
-  const moving = ['toWork', 'toHome', 'toEat', 'toBed', 'toLeisure', 'evacuating'].includes(c.state);
+  const moving = ['toWork', 'toHome', 'toBed', 'toLeisure', 'evacuating'].includes(c.state);
   if (moving) {
     const next = c.path[c.pathI];
     if (c.layer === 1 && next !== undefined && next < N && c.climb <= 0) {
@@ -655,7 +661,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       if (watcher) {
         setThought(c, `Waiting for ${watcher} to pass`);
         c.moving = false;
-        if (c.state === 'toWork' && currentJob(s, c) === 'rest') decide(s, c);
+        if (c.state === 'toWork' && currentJob(s, c) !== c.activeJob) decide(s, c);
         return;
       }
     }
@@ -677,7 +683,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       c.timer += dt;
       if (c.timer > 30) {
         c.timer = 0;
-        if (c.state === 'toWork' && currentJob(s, c) === 'rest') return startHome(s, c);
+        if (c.state === 'toWork' && currentJob(s, c) !== c.activeJob) return decide(s, c);
         if (c.goal >= 0 && !goTo(s, c, [c.goal])) {
           c.state = 'idle';
           c.path = [];
@@ -689,9 +695,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     switch (c.state) {
       case 'toWork': {
         const job = currentJob(s, c);
-        if (job === 'rest' || jobBlocked(s, c, job)) return decide(s, c);
+        if (job !== c.activeJob || jobBlocked(s, c, job)) return decide(s, c);
         c.state = 'working';
-        c.workTimer = cycleLength(c, job);
+        c.workTimer = cycleLength(s, c, job);
         if (job === 'tinker') {
           const bench = getDerived(s).objAt.get(idx(Math.floor(c.x), Math.floor(c.y)));
           c.useObj = bench?.id ?? -1;
@@ -703,10 +709,6 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       case 'evacuating':
         c.state = 'idle';
         return decide(s, c);
-      case 'toEat':
-        c.state = 'eating';
-        c.timer = 20;
-        return;
       case 'toBed':
         c.state = 'sleeping';
         setThought(c, c.bedId >= 0 ? 'Sleeping' : 'Sleeping on plywood');
@@ -722,9 +724,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
   switch (c.state) {
     case 'working': {
       const job = currentJob(s, c);
-      if (job === 'rest' || c.energy < 10) {
+      if (job !== c.activeJob || c.energy < 10) {
         c.useObj = -1;
-        return c.layer === 0 ? startHome(s, c, 'Shift over. Heading home') : decide(s, c);
+        return c.layer === 0 && job === 'rest' ? startHome(s, c, 'Shift over. Heading home') : decide(s, c);
       }
       c.workTimer -= dt;
       if (job === 'tinker' && c.useObj >= 0) {
@@ -733,34 +735,25 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       }
       if (c.workTimer <= 0) {
         const more = doCycle(s, c, job);
-        if (!more || jobBlocked(s, c, job)) {
+        if (!more || planJob(s, c) !== job) {
           c.useObj = -1;
-          return c.layer === 0 ? startHome(s, c, 'Done for now. Heading home') : decide(s, c);
+          return decide(s, c);
         }
-        c.workTimer = cycleLength(c, job);
+        c.workTimer = cycleLength(s, c, job);
       }
       return;
     }
     case 'eating': {
       c.timer -= dt;
-      if (c.hotMeal) {
-        for (const p of getDerived(s).hotPlates) if (Math.floor(c.x) === p.x && Math.floor(c.y) === p.y) p.usedUntil = s.time + 2;
-      }
       if (c.timer <= 0) {
-        if (s.food > 0) {
-          s.food -= 1;
-          c.hunger = Math.min(100, c.hunger + (c.hotMeal ? 62 : 45));
-          if (c.hotMeal) c.morale = Math.min(100, c.morale + 4);
-        }
         c.state = 'idle';
         decide(s, c);
       }
       return;
     }
     case 'sleeping': {
-      const job = currentJob(s, c);
-      const wantWork = job !== 'rest' && !jobBlocked(s, c, job) && c.energy > 45;
-      if (c.energy >= 99 || wantWork || (c.hunger < 25 && s.food > 0)) {
+      const wantWork = planJob(s, c) !== 'rest' && c.energy > 45;
+      if (c.energy >= 99 || wantWork) {
         c.state = 'idle';
         decide(s, c);
       }
@@ -772,9 +765,8 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         const o = s.objects.find((x) => x.id === c.useObj);
         if (o) o.usedUntil = s.time + 2;
       }
-      c.morale = Math.min(100, c.morale + (c.useObj >= 0 ? 0.05 : 0.01) * dt);
-      const job = currentJob(s, c);
-      if (c.timer <= 0 || (job !== 'rest' && !jobBlocked(s, c, job) && c.energy > 20) || c.energy < 30 || (c.hunger < 35 && s.food > 0)) {
+      addSharedMood(s, (c.useObj >= 0 ? 0.05 : 0.01) * dt);
+      if (c.timer <= 0 || (planJob(s, c) !== 'rest' && c.energy > 20) || c.energy < 30) {
         c.useObj = -1;
         c.state = 'idle';
         decide(s, c);
@@ -831,6 +823,8 @@ function escaped(s: GameState, c: Crew) {
   for (const n of s.npcs) if (n.chaseId === c.id) n.state = 'search';
 }
 
+export const BAIL_HOURS = 8;
+
 export function crewCaught(s: GameState, c: Crew, byName: string) {
   c.state = 'away';
   c.awayUntil = Infinity;
@@ -847,35 +841,13 @@ export function crewCaught(s: GameState, c: Crew, byName: string) {
     id: s.nextId++,
     title: `${c.name} got caught`,
     art: 'caught',
-    body: `${byName} caught ${c.name} red-handed in the mall after hours. The police were called. ${c.name} didn't say a word about the ceiling.\n\nPost bail and they sneak back in after two days. Or let them sit it out in county for five.`,
+    body: `${byName} caught ${c.name} red-handed in the mall after hours. The police were called. ${c.name} didn't say a word about the ceiling.\n\nPost bail and they're out today, back in the ceiling in ${BAIL_HOURS} hours. Or let them sit it out in county for five days.`,
     choices: [
       { label: `Post bail ($${bail})`, action: `bail:${c.id}:${bail}`, disabled: s.cash < bail ? 'Not enough cash' : undefined },
       { label: 'Let them sit it out (5 days)', action: `wait:${c.id}` },
       ...(s.crew.length > 1 ? [{ label: 'Cut them loose', action: `cut:${c.id}` }] : []),
     ],
   });
-}
-
-export function hourlyCrew(s: GameState) {
-  const d = getDerived(s);
-  const count = Math.max(1, s.crew.filter((c) => c.state !== 'away').length);
-  const comfortPer = Math.min(36, (d.comfort / count) * 4);
-  const jolly = s.crew.some((c) => has(c, 'jolly') && c.state !== 'away') ? 6 : 0;
-  const cold = new Date(2004, 9, 1 + dayOf(s.time)).getMonth() === 11;
-  const heaters = s.objects.some((o) => o.type === 'heater' && o.powered);
-  for (const c of s.crew) {
-    if (c.state === 'away') continue;
-    let target = 38 + comfortPer + jolly;
-    if (c.bedId < 0) target -= 14;
-    if (c.hunger < 20) target -= 18;
-    if (c.energy < 20) target -= 12;
-    if (cold && !heaters) target -= 10;
-    if (count > bedCapacity(s) + 1) target -= 6;
-    target = Math.max(0, Math.min(100, target));
-    c.morale += (target - c.morale) * 0.08;
-    if (c.morale < 12) c.miserable += 1;
-    else c.miserable = Math.max(0, c.miserable - 0.5);
-  }
 }
 
 export function crewLeaves(s: GameState, c: Crew, reason: string) {

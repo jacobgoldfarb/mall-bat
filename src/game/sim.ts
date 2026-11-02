@@ -1,12 +1,14 @@
-import { BUILD, type BuildId } from './defs';
-import { agentNode, crewLeaves, crowdNow, hourlyCrew, idleBubble, noiseFromCrew, updateCrew } from './crew';
+import { BUILD, canRotate, type BuildId } from './defs';
+import { agentNode, crewLeaves, crowdNow, idleBubble, noiseFromCrew, updateCrew } from './crew';
 import { dailyCandidates, randomHourly, runScript } from './events';
-import { inspectionHotspotUpdate, scheduleInspection } from './inspect';
+import { ferretForage } from './hijinx';
+import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, scheduleInspection } from './inspect';
 import { LAYOUT, N, W, H, idx, inBounds } from './layout';
+import { FOOD_PRICE, MEAL_HOURS, hourlyMood, serveMeal } from './needs';
 import { checkObjectives } from './objectives';
-import { auctionBid, earn, log, pa, rand, sfx, unlock, updateCameras } from './ops';
+import { alertDecay, auctionBid, earn, log, pa, rand, sfx, unlock, updateCameras } from './ops';
 import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateNpcs } from './npc';
-import type { GameState } from './state';
+import type { GameState, Placed } from './state';
 import { AUCTION_DAY, dayOf, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
 import { canPlace, getDerived, markDirty, roomTiles } from './world';
 
@@ -96,12 +98,14 @@ function complaints(s: GameState, dt: number) {
     let noise = 0;
     let smell = 0;
     let drops = 0;
+    let skims = 0;
     for (const i of roomTiles(ri)) {
       noise += noiseField[i];
       smell += s.smell[i];
       if (d.drops.has(i)) drops++;
+      if (phase === 'open' && isSkimming(d.objAt.get(i))) skims++;
     }
-    const rate = p * r.sensitivity * (noise * (1 - mask) * 0.07 + smell * (1 - r.smellMask) * 0.004 + drops * 0.02);
+    const rate = p * r.sensitivity * (noise * (1 - mask) * 0.07 + smell * (1 - r.smellMask) * 0.004 + drops * 0.02 + skims * SKIM_COMPLAINT);
     rs.complaint += rate * dt;
     if (rs.complaint >= 60 && rs.lastWarn !== dayOf(s.time)) {
       rs.lastWarn = dayOf(s.time);
@@ -113,6 +117,32 @@ function complaints(s: GameState, dt: number) {
       scheduleInspection(s, ri, 'complaint', `Complaints about ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} overhead.`);
     }
   }
+}
+
+const SKIM_COMPLAINT = 0.04;
+const JAM_CHANCE = 0.05;
+
+const isSkimming = (o: Placed | undefined) => !!o && !!BUILD[o.type].racket && o.powered && !o.jammed;
+
+function skimRackets(s: GameState) {
+  if (phaseAt(s.time) !== 'open') return;
+  const crowd = crowdNow(s);
+  for (const o of s.objects) {
+    if (!isSkimming(o)) continue;
+    const r = LAYOUT.rooms[LAYOUT.roomAt[idx(o.x, o.y)]];
+    earn(s, Math.round(rand.range(4, 9) * (r.traffic ?? 0.6) * crowd));
+    if (rand.chance(JAM_CHANCE)) {
+      o.jammed = true;
+      log(s, `The Coin Siphon above ${r.name} jammed on a Canadian quarter. Clear it for 1 part.`, 'warn', { x: o.x, y: o.y, layer: 1 });
+    }
+  }
+}
+
+export function clearJam(s: GameState, o: Placed): string | null {
+  if (s.parts < 1) return 'Needs 1 part';
+  s.parts -= 1;
+  o.jammed = false;
+  return null;
 }
 
 function powerAccrual(s: GameState, dt: number) {
@@ -163,15 +193,15 @@ function refillPools(s: GameState) {
   const day = dayOf(s.time);
   const tf = seasonFactor(day) * (0.5 + 0.6 * s.mallHealth);
   const open = (id: string) => !s.rooms[LAYOUT.roomIndex[id]].vacant;
-  s.pools.fountain = Math.round(12 + 38 * tf);
-  s.pools.dumpster = Math.round(4 + 6 * tf);
-  s.pools.vending = 3;
-  s.pools.arcade = open('funzone') ? Math.round(14 + 36 * tf) : 0;
-  s.pools.radiohut = open('radiohut') ? 7 : 0;
-  s.pools.pallets = Math.round(8 + 5 * tf);
-  s.pools.stockroom = 6;
-  s.pools.lostfound = 2 + (tf > 1.5 ? 2 : 0);
-  s.pools.samples = Math.round(5 + 3 * tf);
+  s.pools.fountain = Math.round(18 + 57 * tf);
+  s.pools.dumpster = Math.round(6 + 9 * tf);
+  s.pools.vending = 5;
+  s.pools.arcade = open('funzone') ? Math.round(21 + 54 * tf) : 0;
+  s.pools.radiohut = open('radiohut') ? 11 : 0;
+  s.pools.pallets = Math.round(12 + 8 * tf);
+  s.pools.stockroom = 9;
+  s.pools.lostfound = 3 + (tf > 1.5 ? 3 : 0);
+  s.pools.samples = Math.round(8 + 4 * tf);
 }
 
 function newDay(s: GameState) {
@@ -188,8 +218,8 @@ function newDay(s: GameState) {
   s.gary.affinity = Math.max(0, s.gary.affinity - (s.gary.insider ? 0 : 1));
   s.mallHealth = Math.max(0.1, s.mallHealth - 0.0035);
 
-  const decay = { easy: 4, normal: 2.6, hard: 1.6 }[s.difficulty] + (s.spottedTonight ? 0 : 1.5) + s.alert * 0.05;
-  s.alert = Math.max(0, s.alert - decay);
+  s.alert = Math.max(0, s.alert - alertDecay(s, !s.spottedTonight));
+  s.excuseFatigue *= FATIGUE_KEPT_PER_DAY;
   updateCameras(s);
   if (!s.spottedTonight && s.flags.workedTonight) {
     s.stats.nightsClean++;
@@ -216,20 +246,23 @@ function newDay(s: GameState) {
     }
   }
 
-  for (const c of [...s.crew]) {
-    if (c.miserable >= 18) crewLeaves(s, c, '"I\'d rather sleep in the bus station."');
+  if (s.miserable >= 18 && s.crew.length) {
+    crewLeaves(s, s.crew[s.crew.length - 1], 'The mood up here has been miserable for days. "I\'d rather sleep in the bus station."');
+    s.miserable = 8;
   }
 
   s.dailyIncome.push(Math.round(s.todayIncome));
   s.todayIncome = 0;
   dailyCandidates(s);
+  ferretForage(s);
   if (day >= 3) log(s, `Day ${day + 1}. Developer bid: $${auctionBid(s).toLocaleString()}. Cash: $${Math.floor(s.cash).toLocaleString()}.`, 'info');
 }
 
 function onHour(s: GameState) {
   const day = dayOf(s.time);
   const hour = Math.floor(minuteOfDay(s.time) / 60);
-  hourlyCrew(s);
+  hourlyMood(s);
+  if (MEAL_HOURS.includes(hour)) serveMeal(s);
   runScript(s, day, hour);
   randomHourly(s, hour);
   if (hour === 8 && weekday(day) === 1) billReview(s);
@@ -237,13 +270,14 @@ function onHour(s: GameState) {
     const amt = Math.round(9 * crowdNow(s));
     if (amt > 0) earn(s, amt);
   }
+  skimRackets(s);
   const [m, dd] = md(day);
   if (m === 11 && dd === 26 && hour === 23 && s.todayIncome >= 1000) unlock(s, 'BLACK_FRIDAY');
 }
 
 function onPhase(s: GameState, next: Phase) {
-  if (next === 'open') pa(s, 'Good morning, shoppers! Galleria Pointe is now open.');
-  if (next === 'closing') pa(s, 'Attention shoppers: Galleria Pointe is now closed. Please make your way to the nearest exit. Thank you for shopping with us!');
+  if (next === 'open') pa(s, 'Good morning, shoppers! Northgate Mall is now open.');
+  if (next === 'closing') pa(s, 'Attention shoppers: Northgate Mall is now closed. Please make your way to the nearest exit. Thank you for shopping with us!');
   if (next === 'night') {
     log(s, 'The lights dim. Gary starts his rounds.', 'info');
     if (s.crew.some((c) => c.nightJob !== 'rest')) s.flags.workedTonight = 1;
@@ -299,7 +333,7 @@ function substep(s: GameState, dt: number) {
     s.over = {
       won: false,
       title: 'EVICTED',
-      text: 'At 7 AM, eight police officers and Dale from Maintenance pulled down every ceiling tile in Galleria Pointe.\n\nThey found the plywood. The extension cords. The lava lamp. The futon. A LiveJournal printout titled "my kingdom."\n\nYour crew is trespassed from the property for life. Somewhere above Hot Spot, a lava lamp is still glowing.',
+      text: 'At 7 AM, eight police officers and Dale from Maintenance pulled down every ceiling tile in Northgate Mall.\n\nThey found the plywood. The extension cords. The lava lamp. The futon. A LiveJournal printout titled "my kingdom."\n\nYour crew is trespassed from the property for life. Somewhere above Hot Spot, a lava lamp is still glowing.',
     };
   }
   if (!s.over && s.crew.length === 0) {
@@ -318,16 +352,22 @@ export function tick(s: GameState, minutes: number) {
   s.rng = rand.state;
 }
 
-export function placeObject(s: GameState, type: BuildId, x: number, y: number): string | null {
+export function placeObject(s: GameState, type: BuildId, x: number, y: number, flipped = false): string | null {
   const err = canPlace(s, type, x, y);
   if (err) return err;
-  const cost = BUILD[type].cost;
+  const { cost, parts = 0 } = BUILD[type];
   if (s.cash < cost) return 'Not enough cash';
+  if (s.parts < parts) return `Needs ${parts} parts`;
   s.cash -= cost;
+  s.parts -= parts;
   if (type === 'deck') s.deck[idx(x, y)] = 1;
-  else s.objects.push({ id: s.nextId++, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0 });
+  else s.objects.push({ id: s.nextId++, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0, flipped: flipped && canRotate(type) });
   markDirty();
   return null;
+}
+
+export function rotateObject(o: Placed) {
+  if (canRotate(o.type)) o.flipped = !o.flipped;
 }
 
 export function demolishAt(s: GameState, x: number, y: number): string | null {
@@ -337,6 +377,7 @@ export function demolishAt(s: GameState, x: number, y: number): string | null {
   if (obj) {
     s.objects = s.objects.filter((o) => o !== obj);
     s.cash += Math.floor(BUILD[obj.type].cost * 0.6);
+    s.parts = Math.min(getDerived(s).partsCap, s.parts + Math.floor((BUILD[obj.type].parts ?? 0) / 2));
     for (const c of s.crew) if (c.bedId === obj.id) c.bedId = -1;
     markDirty();
     return null;
@@ -359,8 +400,6 @@ export function deckCount(s: GameState) {
 
 export const KIOSK_COST = 500;
 export const POPUP_COST = 1500;
-export const FOOD_PRICE = 4;
-
 export function leaseKiosk(s: GameState): string | null {
   if (s.business.kiosk) return 'Already leased';
   if (s.cash < KIOSK_COST) return 'Not enough cash';
