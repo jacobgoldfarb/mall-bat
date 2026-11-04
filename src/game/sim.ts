@@ -1,13 +1,13 @@
-import { BUILD, canRotate, type BuildId } from './defs';
-import { agentNode, crewLeaves, crowdNow, idleBubble, noiseFromCrew, updateCrew } from './crew';
+import { BUILD, LOT, NOOK_SMELL, canRotate, type BuildId } from './defs';
+import { agentNode, coolHeat, crewLeaves, crowdNow, idleBubble, noiseFromCrew, updateCrew } from './crew';
 import { dailyCandidates, randomHourly, runScript } from './events';
 import { ferretForage } from './hijinx';
-import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, scheduleInspection } from './inspect';
+import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, rollInspection, scheduleInspection } from './inspect';
 import { LAYOUT, N, W, H, idx, inBounds } from './layout';
 import { FOOD_PRICE, MEAL_HOURS, hourlyMood, serveMeal } from './needs';
 import { checkObjectives } from './objectives';
-import { alertDecay, auctionBid, earn, log, pa, rand, sfx, unlock, updateCameras } from './ops';
-import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateNpcs } from './npc';
+import { auctionBid, earn, log, pa, raiseSuspicion, rand, sfx, suspicionDecay, unlock, updateCameras } from './ops';
+import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateCrewDanger, updateMallItems, updateNpcs } from './npc';
 import type { GameState, Placed } from './state';
 import { AUCTION_DAY, dayOf, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
 import { canPlace, getDerived, markDirty, roomTiles } from './world';
@@ -44,7 +44,7 @@ function updateSmell(s: GameState, dt: number) {
   const neat = s.crew.some((c) => c.traits.includes('neat'));
   for (const p of d.hotPlates) {
     if (p.usedUntil <= s.time) continue;
-    const amt = BUILD.hot_plate.smell! * (neat ? 0.5 : 1) * dt;
+    const amt = BUILD.hot_plate.smell! * (neat ? 0.5 : 1) * (d.nookOf.get(p.id) === 'kitchen' ? NOOK_SMELL : 1) * dt;
     for (let dy = -1; dy <= 1; dy++)
       for (let dx = -1; dx <= 1; dx++) {
         const x = p.x + dx;
@@ -113,13 +113,15 @@ function complaints(s: GameState, dt: number) {
       log(s, `Staff at ${r.name} keep complaining about ${what} in the ceiling. (${Math.round(rs.complaint)}%)`, 'warn', { x: rs.hotX || r.x0, y: rs.hotY || r.y0, layer: 1 });
     }
     if (rs.complaint >= 100) {
-      rs.complaint = 35;
-      scheduleInspection(s, ri, 'complaint', `Complaints about ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} overhead.`);
+      rs.complaint = COMPLAINT_AFTER_REPORT;
+      raiseSuspicion(s, COMPLAINT_REPORT, `${r.name} reported ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} in the ceiling`);
     }
   }
 }
 
 const SKIM_COMPLAINT = 0.04;
+const COMPLAINT_REPORT = 3;
+const COMPLAINT_AFTER_REPORT = 40;
 const JAM_CHANCE = 0.05;
 
 const isSkimming = (o: Placed | undefined) => !!o && !!BUILD[o.type].racket && o.powered && !o.jammed;
@@ -133,14 +135,14 @@ function skimRackets(s: GameState) {
     earn(s, Math.round(rand.range(4, 9) * (r.traffic ?? 0.6) * crowd));
     if (rand.chance(JAM_CHANCE)) {
       o.jammed = true;
-      log(s, `The Coin Siphon above ${r.name} jammed on a Canadian quarter. Clear it for 1 part.`, 'warn', { x: o.x, y: o.y, layer: 1 });
+      log(s, `The Coin Siphon above ${r.name} jammed on a Canadian quarter. Clear it for 5 parts.`, 'warn', { x: o.x, y: o.y, layer: 1 });
     }
   }
 }
 
 export function clearJam(s: GameState, o: Placed): string | null {
-  if (s.parts < 1) return 'Needs 1 part';
-  s.parts -= 1;
+  if (s.parts < 5) return 'Needs 5 parts';
+  s.parts -= 5;
   o.jammed = false;
   return null;
 }
@@ -170,7 +172,11 @@ function billReview(s: GameState) {
     }
     rs.power = 0;
   });
-  log(s, flagged.length ? `Monday utility review: unusual power draw flagged at ${flagged.join(', ')}.` : 'Monday utility review: all electric bills look normal. Nice.', flagged.length ? 'bad' : 'good');
+  log(
+    s,
+    flagged.length ? `Monday utility review: unusual power draw flagged at ${flagged.join(', ')}.` : 'Monday utility review: all electric bills look normal. Nice.',
+    flagged.length ? 'bad' : 'good',
+  );
 }
 
 function ebay(s: GameState, dt: number) {
@@ -180,12 +186,13 @@ function ebay(s: GameState, dt: number) {
   const period = 110 / Math.max(0.25, Math.sqrt(d.pcSignal));
   if (s.ebayTimer < period) return;
   s.ebayTimer = 0;
-  s.goods -= 1;
-  const price = Math.round(rand.range(30, 54) * (0.65 + 0.35 * d.pcSignal));
+  const lot = Math.min(LOT, s.goods);
+  s.goods -= lot;
+  const price = Math.round(rand.range(30, 54) * (lot / LOT) * (0.65 + 0.35 * d.pcSignal));
   earn(s, price);
-  s.stats.ebaySold++;
-  if (s.stats.ebaySold >= 50) unlock(s, 'POWERSELLER');
-  log(s, `eBay: "VINTAGE ${rand.pick(['WALKMAN', 'TAMAGOTCHI', 'GAME BOY COLOR', 'DISCMAN', 'FURBY', 'PALM PILOT', 'ZIP DRIVE', 'BOOMBOX'])} L@@K!! RARE" sold for $${price}.`, 'good');
+  s.stats.ebaySold += lot;
+  if (s.stats.ebaySold >= 50 * LOT) unlock(s, 'POWERSELLER');
+  log(s, `eBay: "VINTAGE ${rand.pick(['WALKMAN', 'TAMAGOTCHI', 'GAME BOY COLOR', 'DISCMAN', 'FURBY', 'PALM PILOT', 'ZIP DRIVE', 'BOOMBOX'])} L@@K!! RARE" (lot of ${lot}) sold for $${price}.`, 'good');
   sfx('cash');
 }
 
@@ -196,10 +203,10 @@ function refillPools(s: GameState) {
   s.pools.fountain = Math.round(18 + 57 * tf);
   s.pools.dumpster = Math.round(6 + 9 * tf);
   s.pools.vending = 5;
-  s.pools.arcade = open('funzone') ? Math.round(21 + 54 * tf) : 0;
-  s.pools.radiohut = open('radiohut') ? 11 : 0;
-  s.pools.pallets = Math.round(12 + 8 * tf);
-  s.pools.stockroom = 9;
+  s.pools.arcade = open('funzone') ? Math.round(35 + 90 * tf) : 0;
+  s.pools.radiohut = open('radiohut') ? 55 : 0;
+  s.pools.pallets = Math.round(60 + 40 * tf);
+  s.pools.stockroom = 45;
   s.pools.lostfound = 3 + (tf > 1.5 ? 3 : 0);
   s.pools.samples = Math.round(8 + 4 * tf);
 }
@@ -214,11 +221,10 @@ function newDay(s: GameState) {
     if (spoiled >= 2) log(s, `${spoiled} food spoiled overnight. A Mini-Fridge would fix that.`, 'info');
   }
   s.food = Math.min(s.food, d.foodCap);
-  s.crew.forEach((c) => (c.familiarity = Math.max(0, c.familiarity - 12)));
   s.gary.affinity = Math.max(0, s.gary.affinity - (s.gary.insider ? 0 : 1));
   s.mallHealth = Math.max(0.1, s.mallHealth - 0.0035);
 
-  s.alert = Math.max(0, s.alert - alertDecay(s, !s.spottedTonight));
+  s.suspicion = Math.max(0, s.suspicion - suspicionDecay(s, !s.spottedTonight));
   s.excuseFatigue *= FATIGUE_KEPT_PER_DAY;
   updateCameras(s);
   if (!s.spottedTonight && s.flags.workedTonight) {
@@ -262,6 +268,7 @@ function onHour(s: GameState) {
   const day = dayOf(s.time);
   const hour = Math.floor(minuteOfDay(s.time) / 60);
   hourlyMood(s);
+  rollInspection(s);
   if (MEAL_HOURS.includes(hour)) serveMeal(s);
   runScript(s, day, hour);
   randomHourly(s, hour);
@@ -291,6 +298,8 @@ function perMinute(s: GameState) {
   powerAccrual(s, 1);
   ebay(s, 1);
   ensureStaff(s);
+  updateCrewDanger(s);
+  updateMallItems(s);
   const m = Math.floor(s.time);
   if (m % 5 === 0) inspectionHotspotUpdate(s, noiseField, s.smell);
   if (phaseAt(s.time) === 'open') {
@@ -321,6 +330,7 @@ function substep(s: GameState, dt: number) {
   for (const c of s.crew) {
     const before = agentNode(c);
     updateCrew(s, c, dt);
+    coolHeat(c, dt);
     trackStaffDoors(s, c, before);
   }
   detection(s, dt);
@@ -328,7 +338,7 @@ function substep(s: GameState, dt: number) {
   for (const ins of s.inspections) if (ins.state === 'scheduled' && ins.at <= s.time) startInspector(s, ins.id);
   s.inspections = s.inspections.filter((i) => i.state !== 'done');
 
-  if (s.alert >= 100 && !s.over) {
+  if (s.suspicion >= 100 && !s.over) {
     unlock(s, 'EVICTED');
     s.over = {
       won: false,
@@ -360,9 +370,20 @@ export function placeObject(s: GameState, type: BuildId, x: number, y: number, f
   if (s.parts < parts) return `Needs ${parts} parts`;
   s.cash -= cost;
   s.parts -= parts;
-  if (type === 'deck') s.deck[idx(x, y)] = 1;
-  else s.objects.push({ id: s.nextId++, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0, flipped: flipped && canRotate(type) });
   markDirty();
+  if (type === 'deck') {
+    s.deck[idx(x, y)] = 1;
+    return null;
+  }
+  const nooksBefore = getDerived(s).nooks.length;
+  const id = s.nextId++;
+  s.objects.push({ id, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0, flipped: flipped && canRotate(type) });
+  markDirty();
+  const formed = getDerived(s).nooks.find((n) => n.members.some((m) => m.id === id));
+  if (formed && getDerived(s).nooks.length > nooksBefore) {
+    log(s, `${formed.def.name} is set up. ${formed.def.bonus}.`, 'good', { x, y, layer: 1 });
+    sfx('good');
+  }
   return null;
 }
 

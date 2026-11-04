@@ -90,6 +90,19 @@ Impact describes the expected improvement to player experience: **Critical**, **
 - [x] Day shift tab first
 - [x] Decoy raccoons are single use
 
+## Design notes (Nov 3)
+
+- [x] Hatch tile can't be built over; drawn as an open hatch with a ladder
+- [x] Parts and goods rescaled ×5 so per-hour yields are whole numbers
+- [x] Alert renamed Suspicion: drives inspection frequency; complaints pick where
+- [x] Per-Bat Heat replaces Dana recognition: builds day and night, 5+ days on one job ramps it, arrest at 100
+- [x] Energy 0 = overworked, lowers mood; mood is a work-speed curve plus stat −1/+1
+- [x] Bats route around guard cones and cameras, and wait for guards to look away
+- [x] Levels 1–10 with themed unlock bundles, level-up notice, clickable preview
+- [x] Furniture-set nooks (Movie Night, Kitchenette, Tool Corner, Bunk Room, Rumpus Room) plus Bean Bag, Card Table, Dartboard, Disco Ball, Ball Pit
+- [x] Mall-floor items set up by Bat errands: Asbestos sign, Wet Floor sign, Out of Order bag, Beeping Tamagotchi
+- [ ] Rope drop raising heat: ignored for now
+
 ## Keep As-Is
 
 - Objectives can remain specific and linear for now.

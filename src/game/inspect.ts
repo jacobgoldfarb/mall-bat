@@ -1,6 +1,6 @@
 import { BUILD } from './defs';
 import { LAYOUT, N, W, idx, inBounds } from './layout';
-import { log, notify, pa, rand, raiseAlert, sfx, unlock } from './ops';
+import { log, notify, pa, rand, raiseSuspicion, sfx, unlock } from './ops';
 import type { GameState, Inspection, InspectionKind, Placed } from './state';
 import { dayOf, minuteOfDay } from './time';
 import { getDerived, markDirty, roomTiles } from './world';
@@ -42,6 +42,26 @@ export function scheduleInspection(s: GameState, room: number, kind: InspectionK
   return ins;
 }
 
+const MAX_PENDING_COMPLAINTS = 2;
+const ROUTINE_CHECK_SUSPICION = 20;
+
+export const inspectionChancePerDay = (s: GameState) => 0.15 + s.suspicion * 0.015;
+
+export function rollInspection(s: GameState) {
+  if (s.inspections.filter((i) => i.kind === 'complaint' && i.state !== 'done').length >= MAX_PENDING_COMPLAINTS) return;
+  if (!rand.chance(inspectionChancePerDay(s) / 24)) return;
+  const rooms = LAYOUT.rooms.map((r, ri) => (r.ceiling && !s.rooms[ri].vacant ? s.rooms[ri].complaint : 0));
+  const total = rooms.reduce((a, w) => a + w, 0);
+  if (total < 10) {
+    if (s.suspicion >= ROUTINE_CHECK_SUSPICION) scheduleNear(s, 'complaint', 'Routine ceiling check.', 1);
+    return;
+  }
+  let roll = rand.next() * total;
+  const ri = rooms.findIndex((w) => (roll -= w) <= 0);
+  const r = LAYOUT.rooms[ri];
+  scheduleInspection(s, ri, 'complaint', `Complaints about ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} overhead.`);
+}
+
 export function scheduleNear(s: GameState, kind: InspectionKind, reason: string, count: number) {
   const decks: number[] = [];
   for (let i = 0; i < N; i++) if (s.deck[i]) decks.push(i);
@@ -63,7 +83,7 @@ export function scheduleNear(s: GameState, kind: InspectionKind, reason: string,
   }
 }
 
-const BASE_SUSPICION: Record<InspectionKind, number> = { pest: 0.15, complaint: 0.25, power: 0.35, fire: 0.5, sweep: 0.9 };
+const BASE_SCRUTINY: Record<InspectionKind, number> = { pest: 0.15, complaint: 0.25, power: 0.35, fire: 0.5, sweep: 0.9 };
 const SIGN_LIMIT = 0.6;
 const RACCOON_LIMIT = 0.7;
 const SIGN_FATIGUE = 0.04;
@@ -74,14 +94,14 @@ export function inZone(ins: Inspection, x: number, y: number): boolean {
   return Math.max(Math.abs(x - ins.x), Math.abs(y - ins.y)) <= ins.radius;
 }
 
-export function suspicion(s: GameState, ins: Inspection): number {
+export function scrutiny(s: GameState, ins: Inspection): number {
   const d = getDerived(s);
   const tippedOff = d.scanner ? 0.1 : 0;
-  return Math.max(0, Math.min(1, BASE_SUSPICION[ins.kind] + s.alert / 250 + s.excuseFatigue - tippedOff));
+  return Math.max(0, Math.min(1, BASE_SCRUTINY[ins.kind] + s.suspicion / 250 + s.excuseFatigue - tippedOff));
 }
 
 export interface InspectionForecast {
-  suspicion: number;
+  scrutiny: number;
   verdict: 'sign' | 'raccoon' | 'search';
   confiscated: Placed[];
   stashed: Placed[];
@@ -93,9 +113,9 @@ export interface InspectionForecast {
 
 export function forecastInspection(s: GameState, ins: Inspection): InspectionForecast {
   const d = getDerived(s);
-  const sus = suspicion(s, ins);
+  const sus = scrutiny(s, ins);
   const crewHome = s.crew.some((c) => c.layer === 1 && c.state !== 'away');
-  const base = { suspicion: sus, confiscated: [], stashed: [], decoy: null, deckTiles: [], crewHome, value: 0 };
+  const base = { scrutiny: sus, confiscated: [], stashed: [], decoy: null, deckTiles: [], crewHome, value: 0 };
   const signs = ins.kind !== 'fire' && ins.kind !== 'sweep' && d.signs.some((o) => Math.max(Math.abs(o.x - ins.x), Math.abs(o.y - ins.y)) <= BUILD[o.type].deterRadius!);
   if (signs && sus < SIGN_LIMIT) return { ...base, verdict: 'sign' };
   const decoy = s.objects.find((o) => BUILD[o.type].decoy && inZone(ins, o.x, o.y));
@@ -159,11 +179,18 @@ export function revealInspection(s: GameState, ins: Inspection) {
     s.stats.raccoons++;
     s.objects = s.objects.filter((o) => o !== forecast.decoy);
     markDirty();
-    raiseAlert(s, -3, 'raccoon');
+    raiseSuspicion(s, -3, 'raccoon');
     unlock(s, 'RACCOONS');
     sfx('squeak');
     pa(s, `Maintenance update: the noises in ${room.name} were a RACCOON. Pest control has been notified. Carry on, shoppers.`);
-    log(s, tired ? `"Another raccoon? Same one?" The decoy above ${room.name} worked, barely.` : `"IT WAS RACCOONS." Pest control hauled the decoy out of the ceiling above ${room.name}. Worth every penny.`, 'good', focus);
+    log(
+      s,
+      tired
+        ? `"Another raccoon? Same one?" The decoy above ${room.name} worked, barely.`
+        : `"IT WAS RACCOONS." Pest control hauled the decoy out of the ceiling above ${room.name}. Worth every penny.`,
+      'good',
+      focus,
+    );
     return;
   }
 
@@ -176,7 +203,7 @@ export function revealInspection(s: GameState, ins: Inspection) {
   if (confiscated.length || decks) {
     s.objects = s.objects.filter((o) => !lost.has(o));
     markDirty();
-    raiseAlert(s, Math.min(13, 4 + confiscated.length * 1.1 + decks * 0.08), `Squatter camp found above ${room.name}`);
+    raiseSuspicion(s, Math.min(13, 4 + confiscated.length * 1.1 + decks * 0.08), `Squatter camp found above ${room.name}`);
     rs.complaint = 0;
     sfx('bad');
     pa(s, `Attention staff: evidence of trespassers found in the ceiling above ${room.name}. Security has been notified.`);
@@ -185,14 +212,14 @@ export function revealInspection(s: GameState, ins: Inspection) {
   } else {
     s.stats.inspectionsFoundNothing++;
     rs.complaint = Math.max(0, rs.complaint - 20);
-    raiseAlert(s, -2, 'nothing found');
+    raiseSuspicion(s, -2, 'nothing found');
     unlock(s, 'NOTHING');
     log(s, `Dale poked his head into the ceiling above ${room.name}. "Nothing up here but dust. Must be the pipes."`, 'good', focus);
     sfx('good');
   }
   if (caught.length) {
     s.stats.spotted += caught.length;
-    raiseAlert(s, 3 * caught.length, 'a face in the ceiling');
+    raiseSuspicion(s, 3 * caught.length, 'a face in the ceiling');
     log(s, `${caught.map((c) => c.name).join(' and ')} scrambled off across the plywood as a flashlight swept the ceiling. They saw someone.`, 'bad', focus);
   }
 }

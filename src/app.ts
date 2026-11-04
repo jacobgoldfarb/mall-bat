@@ -21,16 +21,18 @@ export interface AppState {
   menu: 'none' | 'pause' | 'settings' | 'help' | 'newgame' | 'jobs';
   jobsCrew: number | null;
   jobsShift: 'day' | 'night';
-  buildCategory: BuildCategory | 'business';
+  buildCategory: BuildCategory | 'business' | 'sets';
   buildOpen: boolean;
   selectedObj: number | null;
   hoverScreen: { x: number; y: number } | null;
   toasts: Toast[];
+  levelUp: { level: number; until: number } | null;
   renderer: Renderer | null;
   tick: number;
   logOpen: boolean;
   objectiveOpen: boolean;
   inspectionsOpen: boolean;
+  levelsOpen: boolean;
   crewExpanded: number | null;
   autoPause: boolean;
   uiScale: number;
@@ -61,15 +63,19 @@ export const app: AppState = {
   selectedObj: null,
   hoverScreen: null,
   toasts: [],
+  levelUp: null,
   renderer: null,
   tick: 0,
   logOpen: true,
   objectiveOpen: true,
   inspectionsOpen: false,
+  levelsOpen: false,
   crewExpanded: null,
   autoPause: localStorage.getItem('dropceiling.autopause') !== '0',
   uiScale: 1,
 };
+
+export const LEVEL_UP_MS = 5200;
 
 let toastId = 1;
 const listeners = new Set<() => void>();
@@ -109,12 +115,14 @@ export function selectObject(id: number | null) {
   focusPowerFor(id === null ? null : (app.state?.objects.find((o) => o.id === id)?.type ?? null));
 }
 
+export const buildLayer = (id: BuildId): 0 | 1 => (BUILD[id].floor ? 0 : 1);
+
 export function selectBuild(id: BuildId | null) {
   focusPowerFor(id);
   app.view.build = id;
   app.view.demolish = false;
   app.view.dragStart = null;
-  if (id) app.view.layer = 1;
+  if (id) app.view.layer = buildLayer(id);
   refresh();
 }
 

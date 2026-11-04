@@ -1,6 +1,6 @@
 import { LAYOUT } from './layout';
-import { addMood } from './needs';
-import { earn, log, pa, pushModal, rand, raiseAlert, sfx } from './ops';
+import { addMood, stat } from './needs';
+import { earn, log, pa, pushModal, rand, raiseSuspicion, sfx } from './ops';
 import type { Crew, GameState } from './state';
 import { dayOf, mallHours } from './time';
 import { getDerived } from './world';
@@ -23,7 +23,7 @@ interface Hijinx {
   choices: HijinxChoice[];
 }
 
-const passes = (c: Crew, stat: Stat) => rand.chance(0.2 + c[stat] * 0.13);
+const passes = (s: GameState, c: Crew, k: Stat) => rand.chance(0.2 + stat(s, c, k) * 0.13);
 
 function gain(s: GameState, k: { food?: number; parts?: number; goods?: number }) {
   const d = getDerived(s);
@@ -51,7 +51,7 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Turn it in to Lost & Found',
         run: (s) => {
-          raiseAlert(s, -3, 'good deed');
+          raiseSuspicion(s, -3, 'good deed');
           addMood(s, 4);
           good(s, 'Turned in the wallet. Gary was touched. Things feel a bit lighter.');
         },
@@ -69,12 +69,12 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Hold the pose until closing',
         run: (s, c) => {
-          if (passes(c, 'stealth')) {
-            gain(s, { goods: 1 });
+          if (passes(s, c, 'stealth')) {
+            gain(s, { goods: 5 });
             addMood(s, 3);
             good(s, `${c.name} held perfectly still for six hours. A teen took their picture for LiveJournal. They walked out at closing still wearing the $60 hoodie.`);
           } else {
-            raiseAlert(s, 8, 'mannequin sneezed');
+            raiseSuspicion(s, 8, 'mannequin sneezed');
             complain(s, 'abercromp', 25);
             bad(s, `${c.name} sneezed. A woman screamed. ${c.name} ran out through the stockroom, still holding the SALE sign.`);
           }
@@ -83,13 +83,13 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Do the robot',
         run: (s, c) => {
-          if (passes(c, 'charm')) {
+          if (passes(s, c, 'charm')) {
             const tips = rand.int(25, 55);
             earn(s, tips);
-            c.familiarity = Math.min(100, c.familiarity + 15);
+            c.heat = Math.min(100, c.heat + 15);
             good(s, `${c.name} did the robot to "Hey Ya!" for forty minutes. The crowd threw $${tips} into a cargo pocket.`);
           } else {
-            raiseAlert(s, 5, 'unlicensed robot');
+            raiseSuspicion(s, 5, 'unlicensed robot');
             bad(s, `${c.name}'s robot drew a crowd, then a manager, then a mall cop asking about a "performance permit."`);
           }
         },
@@ -106,8 +106,8 @@ const HIJINX: Hijinx[] = [
       {
         label: (c) => `${c.name} dives in front of it`,
         run: (s, c) => {
-          c.familiarity = Math.min(100, c.familiarity + 10);
-          if (passes(c, 'handy')) {
+          c.heat = Math.min(100, c.heat + 10);
+          if (passes(s, c, 'handy')) {
             gain(s, { food: 8 });
             good(s, `${c.name} caught the cart by the axle, one-handed. The vendor wept and paid them in pretzels.`);
           } else {
@@ -139,7 +139,7 @@ const HIJINX: Hijinx[] = [
         label: () => 'Keep him. His name is Bandit.',
         run: (s) => {
           s.flags.ferret = 1;
-          gain(s, { parts: -1 });
+          gain(s, { parts: -5 });
           addMood(s, 6);
           good(s, 'Bandit lives here now. He sleeps in a Pringles can. Every so often he drags something shiny back from the vents.');
         },
@@ -148,7 +148,7 @@ const HIJINX: Hijinx[] = [
         label: () => 'Return him for the reward',
         run: (s) => {
           earn(s, 25);
-          raiseAlert(s, 3, 'suspiciously good at ferrets');
+          raiseSuspicion(s, 3, 'suspiciously good at ferrets');
           bad(s, 'Pet Palace paid the $25 reward, then asked where exactly you found him. You said "around."');
         },
       },
@@ -168,7 +168,7 @@ const HIJINX: Hijinx[] = [
           s.cash -= 20;
           const card = rand.int(0, 2);
           if (card === 0) {
-            raiseAlert(s, -6, 'the spirits are calm');
+            raiseSuspicion(s, -6, 'the spirits are calm');
             good(s, 'The Moon card. "The eyes that watch will grow tired." Mall security seems strangely relaxed today.');
           } else if (card === 1) {
             s.pools.fountain = (s.pools.fountain ?? 0) + 30;
@@ -183,7 +183,7 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Call her a fraud',
         run: (s, c) => {
-          if (passes(c, 'charm')) {
+          if (passes(s, c, 'charm')) {
             s.rooms.forEach((r) => (r.complaint = Math.max(0, r.complaint - 20)));
             good(s, `Madame Zelda, insulted, tells every store manager the mall is haunted. Now every thump in the ceiling is "probably just the ghost."`);
           } else {
@@ -207,7 +207,7 @@ const HIJINX: Hijinx[] = [
         label: () => 'Race Doris',
         run: (s, c) => {
           if (rand.chance(0.25 + c.energy / 250)) {
-            raiseAlert(s, -4, 'mallwalker approved');
+            raiseSuspicion(s, -4, 'mallwalker approved');
             good(s, `${c.name} edged out Doris by a visor. The Mallwalkers now walk in formation around ${c.name} every morning, like a tiny teal Secret Service.`);
           } else {
             c.energy = Math.max(0, c.energy - 40);
@@ -221,7 +221,7 @@ const HIJINX: Hijinx[] = [
         disabled: (s) => (s.cash < 10 ? 'Needs $10' : undefined),
         run: (s, c) => {
           s.cash -= 10;
-          c.familiarity = Math.max(0, c.familiarity - 40);
+          c.heat = Math.max(0, c.heat - 40);
           good(s, `${c.name} got a visor, a pedometer, and a laminated membership card. Nobody looks twice at a mallwalker.`);
         },
       },
@@ -237,12 +237,12 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Speak as the Voice of the Ceiling',
         run: (s, c) => {
-          if (passes(c, 'charm')) {
+          if (passes(s, c, 'charm')) {
             gain(s, { food: 6 });
             good(s, 'The kids of EB Gamez now leave offerings of Bagel Bites under the vent. The Voice of the Ceiling is pleased.');
           } else {
             complain(s, 'ebgamez', 35);
-            raiseAlert(s, 3, 'the ceiling swore');
+            raiseSuspicion(s, 3, 'the ceiling swore');
             bad(s, 'A kid told his mom the ceiling said a bad word. His mom told the manager. The manager is staring at the vent.');
           }
         },
@@ -266,7 +266,7 @@ const HIJINX: Hijinx[] = [
         label: () => 'Wear it around the mall',
         run: (s, c) => {
           const tips = rand.int(10, 30);
-          c.familiarity = 0;
+          c.heat = 0;
           earn(s, tips);
           good(s, `Nobody recognizes a hot dog. ${c.name} posed for photos with toddlers all afternoon and made $${tips}.`);
         },
@@ -274,8 +274,8 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Sell it on eBay',
         run: (s) => {
-          gain(s, { goods: 2 });
-          good(s, 'Listed as "VINTAGE MASCOT SUIT RARE L@@K." Worth about two goods to the right weirdo.');
+          gain(s, { goods: 10 });
+          good(s, 'Listed as "VINTAGE MASCOT SUIT RARE L@@K." Worth about ten goods to the right weirdo.');
         },
       },
       {
@@ -296,11 +296,11 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Teach it to say "ceiling empty"',
         run: (s, c) => {
-          if (passes(c, 'charm')) {
-            raiseAlert(s, -5, 'the Furby vouched for you');
+          if (passes(s, c, 'charm')) {
+            raiseSuspicion(s, -5, 'the Furby vouched for you');
             good(s, 'A clerk found the Furby in the morning. It said "CEILING EMPTY" and everyone laughed. Rumors of ceiling people sound sillier now.');
           } else {
-            raiseAlert(s, 6, 'snitch Furby');
+            raiseSuspicion(s, 6, 'snitch Furby');
             bad(s, `A clerk found the Furby in the morning. It said "HI ${c.name.toUpperCase()}! ${c.name.toUpperCase()} UP THERE!" The clerk looked up for a long time.`);
           }
         },
@@ -308,8 +308,8 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Take out the batteries',
         run: (s) => {
-          gain(s, { parts: 1 });
-          log(s, 'One last, slow "me... love... you..." and then silence. +1 part.', 'info');
+          gain(s, { parts: 5 });
+          log(s, 'One last, slow "me... love... you..." and then silence. +5 parts.', 'info');
         },
       },
     ],
@@ -327,7 +327,7 @@ const HIJINX: Hijinx[] = [
         disabled: (s) => (s.cash < 15 ? 'Needs $15' : undefined),
         run: (s, c) => {
           s.cash -= 15;
-          c.familiarity = Math.max(0, c.familiarity - 40);
+          c.heat = Math.max(0, c.heat - 40);
           addMood(s, 5);
           good(s, `The crew framed ${c.name}'s soft-focus portrait over the futon. ${c.name} keeps the frosted tips. The mall cops don't recognize them at all.`);
         },
@@ -335,9 +335,9 @@ const HIJINX: Hijinx[] = [
       {
         label: () => 'Walk out with the fog machine',
         run: (s, c) => {
-          gain(s, { parts: 3 });
-          if (!passes(c, 'stealth')) raiseAlert(s, 4, 'missing fog machine');
-          good(s, `${c.name} walked out of Glamour Shots inside a cloud of fog, carrying the fog machine. Stripped for 3 parts.`);
+          gain(s, { parts: 15 });
+          if (!passes(s, c, 'stealth')) raiseSuspicion(s, 4, 'missing fog machine');
+          good(s, `${c.name} walked out of Glamour Shots inside a cloud of fog, carrying the fog machine. Stripped for 15 parts.`);
         },
       },
     ],
@@ -374,8 +374,8 @@ export function resolveHijinx(s: GameState, key: string, choice: number, crewId:
 export function ferretForage(s: GameState) {
   if (!s.flags.ferret) return;
   if (rand.chance(0.25)) {
-    gain(s, { parts: 1 });
-    log(s, 'Bandit dragged a RadioHut power adapter back through the vents. +1 part.', 'good');
+    gain(s, { parts: 5 });
+    log(s, 'Bandit dragged a RadioHut power adapter back through the vents. +5 parts.', 'good');
   } else {
     const change = rand.int(3, 12);
     earn(s, change);

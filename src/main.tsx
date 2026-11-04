@@ -1,8 +1,8 @@
 import { render } from 'preact';
-import { app, MINUTES_PER_SECOND, toast } from './app';
+import { app, LEVEL_UP_MS, MINUTES_PER_SECOND, refresh, toast } from './app';
 import { audio } from './audio/audio';
 import { newGame, saveGame } from './game/create';
-import { ACHIEVEMENTS, achievementQueue, noticeQueue, sfxQueue } from './game/ops';
+import { ACHIEVEMENTS, achievementQueue, levelUpQueue, noticeQueue, sfxQueue } from './game/ops';
 import { placeObject, tick } from './game/sim';
 import { scheduleInspection } from './game/inspect';
 import { dayOf, phaseAt } from './game/time';
@@ -68,13 +68,14 @@ function frame(now: number) {
     if (!app.demo) app.demo = makeDemo();
     titleT += dt;
     tick(app.demo, dt * MINUTES_PER_SECOND * 2);
-    app.demo.alert = 0;
+    app.demo.suspicion = 0;
     app.demo.over = null;
     renderer.cam.zoom = 1.15;
     renderer.centerOn(24 + Math.sin(titleT * 0.05) * 9, 8 + Math.cos(titleT * 0.04) * 3);
     renderer.draw(app.demo, { ...app.view, layer: Math.floor(titleT / 14) % 2 === 0 ? 0 : 1, hover: null, build: null, demolish: false, overlay: 'none', selectedCrew: null }, now / 33);
     sfxQueue.length = 0;
     achievementQueue.length = 0;
+    levelUpQueue.length = 0;
     noticeQueue.length = 0;
   } else if (app.state) {
     const s = app.state;
@@ -97,6 +98,11 @@ function frame(now: number) {
           renderer.centerOn(n.focus.x + 0.5, n.focus.y + 0.5);
         }
       }
+    }
+    if (levelUpQueue.length && !s.modals.length) {
+      app.levelUp = { level: Math.max(...levelUpQueue), until: performance.now() + LEVEL_UP_MS };
+      levelUpQueue.length = 0;
+      refresh();
     }
     while (achievementQueue.length) {
       const id = achievementQueue.shift()!;

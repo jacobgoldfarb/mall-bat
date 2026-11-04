@@ -7,10 +7,11 @@ import type { Difficulty, GameState } from '../game/state';
 import { LAYOUT } from '../game/layout';
 import { Icon } from './icons';
 import { JobsMenu } from './jobs';
-import { BottomBar, BuildPanel, CrewPanel, GameOver, InspectionPanel, LogPanel, ModalView, ObjectiveCard, SelectedObject, Toasts, Tooltip, TopBar } from './hud';
+import { BottomBar, BuildPanel, CrewPanel, GameOver, InspectionPanel, LevelUpBanner, LogPanel, ModalView, ObjectiveCard, SelectedObject, Toasts, Tooltip, TopBar } from './hud';
 
 export function startGame(s: GameState) {
   app.state = s;
+  app.levelUp = null;
   app.screen = 'game';
   app.menu = 'none';
   app.paused = false;
@@ -65,6 +66,7 @@ export function App() {
       <SelectedObject s={s} />
       {!app.view.dragStart && app.menu === 'none' && !s.modals.length && <Tooltip s={s} />}
       <Toasts />
+      <LevelUpBanner />
       {!s.over && <ModalView s={s} />}
       {s.over && (
         <GameOver
@@ -98,7 +100,8 @@ function Title() {
       <div class="title-card">
         <div class="title-sub">NORTHGATE MALL · FALL 2004</div>
         <h1 class="title-logo">
-          MALL<br />
+          MALL
+          <br />
           BATS
         </h1>
         <div class="title-tag">A mall squatter tycoon. Build a kingdom in the ceiling. Come out at night. Don't get caught.</div>
@@ -150,7 +153,7 @@ function NewGame() {
   const [name, setName] = useState('Jace');
   const [diff, setDiff] = useState<Difficulty>('normal');
   const diffs: { id: Difficulty; name: string; desc: string }[] = [
-    { id: 'easy', name: 'Window Shopper', desc: 'Lazier guards, cheaper auction, forgiving alert.' },
+    { id: 'easy', name: 'Window Shopper', desc: 'Lazier guards, cheaper auction, forgiving suspicion.' },
     { id: 'normal', name: 'Squatter', desc: 'The intended experience.' },
     { id: 'hard', name: 'Dead Mall', desc: 'Sharp-eyed guards, stingy power bills, a hungry developer.' },
   ];
@@ -308,55 +311,89 @@ function Help() {
             <h4>
               <Icon name="art.intro" /> The Ceiling
             </h4>
-            <p>Your kingdom lives above the drop ceiling. Lay <b>plywood decks</b> out from the ladder hatch in the Service Corridor, then furnish. Press <b>Tab</b> to switch between the Ceiling and the Mall.</p>
+            <p>
+              Your kingdom lives above the drop ceiling. Lay <b>plywood</b> out from the hatch in the Service Corridor, then move in. <b>Tab</b> flips between the ceiling and the mall.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="leisure" /> What's Below Matters
             </h4>
-            <p>Every store has <b>noise cover</b> and <b>smell cover</b>. Your TV is fine above the screaming Fun Zone arcade and a disaster above Boundaries Books. Cook above Cinnabomb. Each store's complaint bar sits under its name. The <b>Noise</b> and <b>Smell</b> heat maps show what's leaking out, and each store's cover.</p>
+            <p>
+              Every store below hides some noise and some smell. A TV over the Fun Zone is fine. A TV over Boundaries Books is not. The <b>Noise</b> and <b>Smell</b> maps show what's leaking.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="art.gary" /> Inspections
             </h4>
-            <p>When a store's complaints hit 100%, someone checks its ceiling the next morning. The red zone shows where, and the <b>Inspections</b> panel predicts the result. Each check has a <b>suspicion</b> level (from its type, the Alert, and overused excuses). Low: an <b>Asbestos sign</b> turns them back. Medium: a <b>Decoy Raccoon</b> takes the blame, and gets hauled off by pest control. Any Bat at home stashes portable items. Anything they find raises the Alert.</p>
+            <p>
+              Stores that hear or smell too much report you, and inspectors come up to look. The red zone shows where. Clear out, stash what you can, or give them a reason to leave early.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="food" /> Food & Mood
             </h4>
-            <p>The Bats eat together at <b>8 AM and 8 PM</b>, one portion each. If the stash runs dry, someone buys slices ($4). If cash runs dry too, everyone goes hungry: faster tiring, slower work, worse mood. <b>Mood</b> is shared: comfort, beds, hot meals, and leisure raise it. Below 30, everyone works slower. Stay miserable and someone leaves. <b>Energy</b> is per Bat.</p>
+            <p>
+              The Bats eat together at <b>8 AM and 8 PM</b>. <b>Mood</b> is shared: comfort, beds and hot meals keep it up, and happy Bats work faster. Stay miserable and someone leaves.
+            </p>
           </section>
           <section>
             <h4>
-              <Icon name="rank" /> Rank
+              <Icon name="rank" /> Levels
             </h4>
-            <p>Rank comes from <b>lifetime earnings</b>. Every dollar the Bats bring home counts, even after you spend it. Each rank unlocks new builds and jobs.</p>
+            <p>
+              Everything the Bats earn counts toward your level, even after you spend it. Each level unlocks something new. Click the level meter to peek ahead.
+            </p>
+          </section>
+          <section>
+            <h4>
+              <Icon name="sets" /> Furniture Sets
+            </h4>
+            <p>
+              Some furniture is better together. Check the <b>Sets</b> tab for the recipes.
+            </p>
+          </section>
+          <section>
+            <h4>
+              <Icon name="mall" /> Mall Floor
+            </h4>
+            <p>
+              Some <b>Hide</b> gear goes on the mall floor. Pick a spot and a Bat runs it down when they're free, with all the usual risk.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="power" /> Power Bills
             </h4>
-            <p>Power Splices steal from the store below. Every Monday at 8 AM the bills get reviewed, and a greedy splice gets an electrician. Spread your load. Vacant stores have no power.</p>
+            <p>
+              Splices steal power from the store below, and that store pays the bill. Bills get reviewed every Monday. Don't get greedy.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="work" /> Jobs
             </h4>
-            <p>Open the <b>Job Board</b> (J) and drag each Bat onto one <b>Day</b> and one <b>Night</b> job. If their job is blocked, picked clean, or they were just spotted, they rest, or fill in on a safe job if you allow it. Cards show estimated yield, risk, and walking time for the selected Bat. Day jobs blend into the crowd but build <b>recognition</b> with Officer Dana: at 100%, that Bat is banned from day jobs for 3 days. Night jobs pay better, but Gary, the cameras, and the janitors are watching. Flashlights don't see through walls or shelves. <b>Rope Drops</b> are escape hatches.</p>
+            <p>
+              Open the <b>Job Board</b> (J) and give each Bat a <b>Day</b> and a <b>Night</b> job. Night pays better, but Gary is out there. Each Bat carries <b>Heat</b>: get spotted or get predictable and Officer Dana starts paying attention.
+            </p>
           </section>
           <section>
             <h4>
-              <Icon name="alert" /> Alert
+              <Icon name="alert" /> Suspicion
             </h4>
-            <p>Sightings, catches, and discoveries raise the Mall Alert. Higher levels bring more cameras, a second guard, and a dog. At <b>100%</b> they sweep the ceiling and you're evicted. It cools every morning, and faster after a clean night with nobody spotted. Alert is mall-wide. Officer Dana's recognition is per Bat and only affects day jobs.</p>
+            <p>
+              <b>Suspicion</b> is how sure the mall is that someone lives upstairs. It brings more guards, more cameras and more inspections. It cools off on quiet nights. At <b>100%</b> they tear the ceiling down.
+            </p>
           </section>
           <section>
             <h4>
               <Icon name="cash" /> The Goal
             </h4>
-            <p>Northgate Mall goes to auction on <b>Dec 31, 2004</b>. Have more <b>cash</b> than the developer bids. As stores close, the mall dies and the bid drops.</p>
+            <p>
+              Northgate Mall goes to auction on <b>Dec 31, 2004</b>. Have more <b>cash</b> than the developer bids. As stores close, the mall dies and the bid drops.
+            </p>
           </section>
           <section>
             <h4>Controls</h4>

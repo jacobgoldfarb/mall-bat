@@ -349,6 +349,14 @@ export class AudioEngine {
         this.tone(784, 0.15, 'triangle', 0.07, 0.1);
         this.tone(1047, 0.35, 'triangle', 0.07, 0.2);
         break;
+      case 'levelup':
+        [523, 659, 784].forEach((f, i) => this.tone(f, 0.12, 'square', 0.045, i * 0.09));
+        this.tone(1047, 0.8, 'square', 0.05, 0.3);
+        this.tone(784, 0.8, 'triangle', 0.06, 0.3);
+        this.tone(659, 0.8, 'triangle', 0.05, 0.3);
+        this.burst(0.35, 6000, 0.04, 0.3);
+        [2093, 2637, 3136, 4186].forEach((f, i) => this.tone(f, 0.14, 'sine', 0.03, 0.5 + i * 0.07));
+        break;
       case 'climb':
         this.burst(0.05, 1200, 0.1);
         this.burst(0.05, 1000, 0.1, 0.12);

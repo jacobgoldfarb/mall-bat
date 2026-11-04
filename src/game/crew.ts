@@ -1,10 +1,10 @@
-import { ARCHETYPES, FIRST_NAMES, JOB, JOBS, RANKS, type JobDef, type JobId } from './defs';
+import { ARCHETYPES, BUILD, FIRST_NAMES, JOB, JOBS, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, type JobDef, type JobId } from './defs';
 import { LAYOUT, N, W, idx } from './layout';
-import { addSharedMood, workMult } from './needs';
-import { earn, log, rand, rankOf, raiseAlert, sfx, unlock } from './ops';
-import type { Agent, Candidate, Crew, GameState, Look } from './state';
+import { addSharedMood, stat, workMult } from './needs';
+import { earn, levelOf, log, rand, raiseSuspicion, sfx, unlock } from './ops';
+import type { Agent, Candidate, Crew, GameState, Look, Placed } from './state';
 import { dayOf, phaseAt, seasonFactor, hourCurve, minuteOfDay, md } from './time';
-import { ACCESS_CREW, cameraWatching, findPath, getDerived, lineOfSight, nodeOf } from './world';
+import { ACCESS_CREW, besideTiles, blocksWalking, cameraWatching, crewDanger, findPath, getDerived, lineOfSight, markDirty, nodeOf, smoothCeilingPath } from './world';
 
 const SKINS = ['#f2d0b1', '#e0b08a', '#c68e62', '#a06a42', '#7a4e2e', '#5a3820', '#f7dcc5'];
 const BOTTOMS = ['#2f4a7a', '#3a5a8a', '#22304a', '#5a5a5a', '#c8b48a', '#1a1a1a', '#6a7a9a'];
@@ -73,7 +73,7 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     handy: c.handy,
     traits: c.traits,
     energy: 75,
-    familiarity: 0,
+    heat: 0,
     dayJob: 'rest',
     nightJob: 'rest',
     fillIn: false,
@@ -86,7 +86,6 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     carrying: { cash: 0, food: 0, parts: 0, goods: 0 },
     detect: 0,
     bedId: -1,
-    bannedUntil: 0,
     awayUntil: 0,
     joinedDay: dayOf(s.time),
     earned: 0,
@@ -95,6 +94,7 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     waitUntil: 0,
     recall: false,
     hiding: false,
+    replanAt: 0,
     camWait: 0,
   };
   s.crew.push(crew);
@@ -159,7 +159,7 @@ export const agentNode = (a: Agent) => nodeOf(a.layer, Math.floor(a.x), Math.flo
 export function goTo(s: GameState, a: Agent, goals: number[] | ((n: number) => boolean), access = ACCESS_CREW): boolean {
   const path = findPath(s, agentNode(a), goals, access);
   if (!path) return false;
-  a.path = path;
+  a.path = smoothCeilingPath(s, path);
   a.pathI = 1;
   a.goal = path[path.length - 1];
   return true;
@@ -205,8 +205,7 @@ export function currentJob(s: GameState, c: Crew): JobId {
 
 export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
   const def = JOB[job];
-  if (rankOf(s) < def.rank) return `Requires rank: ${RANKS[def.rank].name}`;
-  if (def.shift === 'day' && c.bannedUntil > s.time) return 'Banned from day jobs for now';
+  if (levelOf(s) < def.level) return `Unlocks at Level ${def.level}`;
   const d = getDerived(s);
   switch (job) {
     case 'kiosk':
@@ -222,8 +221,8 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
       break;
     case 'tinker':
       if (!d.workbenches.length) return 'Needs a powered Workbench';
-      if (!jobTarget(s, c, 'tinker')) return `Every Workbench is taken (1 Bat each, you have ${d.workbenches.length})`;
-      if (s.parts < 2) return 'Needs 2 parts';
+      if (!jobTarget(s, c, 'tinker')) return 'Every Workbench is taken';
+      if (s.parts < 2 * LOT) return `Needs ${2 * LOT} parts`;
       if (s.goods >= d.goodsCap) return 'Goods storage full';
       break;
     case 'gary':
@@ -254,11 +253,23 @@ export const POOL_OF: Partial<Record<JobId, string>> = {
 
 const nightKey = (s: GameState) => dayOf(s.time - 360);
 
+const freeBenches = (s: GameState, c: Crew) => getDerived(s).workbenches.filter((b) => !s.crew.some((o) => o !== c && o.useObj === b.id && o.state === 'working'));
+
+const touching = (c: Crew, o: Placed) => Math.max(Math.abs(Math.floor(c.x) - o.x), Math.abs(Math.floor(c.y) - o.y)) <= 1;
+
+function faceObject(c: Crew, o: Placed) {
+  c.facing = Math.atan2(o.y + 0.5 - c.y, o.x + 0.5 - c.x);
+}
+
+export function useSpots(s: GameState, o: Placed): number[] {
+  return BUILD[o.type].seat ? [nodeOf(1, o.x, o.y)] : besideTiles(s, o);
+}
+
 export function jobTarget(s: GameState, c: Crew, job: JobId): number[] | null {
   const def = JOB[job];
   if (job === 'tinker') {
-    const benches = getDerived(s).workbenches.filter((b) => !s.crew.some((o) => o !== c && o.useObj === b.id && o.state === 'working'));
-    return benches.length ? benches.map((b) => nodeOf(1, b.x, b.y)) : null;
+    const spots = freeBenches(s, c).flatMap((b) => besideTiles(s, b));
+    return spots.length ? spots : null;
   }
   if (job === 'popup') {
     const r = LAYOUT.rooms[s.business.popupRoom];
@@ -312,15 +323,15 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     s.pools[pool] = (s.pools[pool] ?? 0) - got;
     return got;
   };
-  const stealthy = 1.3 - c.stealth * 0.15;
-  const shrinkage = (roomId: string, amt: number) => raiseAlert(s, amt * stealthy, `${LAYOUT.rooms[LAYOUT.roomIndex[roomId]].name} reported missing stock`);
+  const stealthy = 1.3 - stat(s, c, 'stealth') * 0.15;
+  const shrinkage = (roomId: string, amt: number) => raiseSuspicion(s, amt * stealthy, `${LAYOUT.rooms[LAYOUT.roomIndex[roomId]].name} reported missing stock`);
   const crowd = crowdNow(s);
   const [m, d] = md(dayOf(s.time));
   const blackFriday = m === 11 && d === 26;
   const boxingDay = m === 12 && d === 26;
   switch (job) {
     case 'fountain': {
-      const got = Math.round(take('fountain', (2.5 + c.handy * 1.2) * rand.range(0.7, 1.3)));
+      const got = Math.round(take('fountain', (2.5 + stat(s, c, 'handy') * 1.2) * rand.range(0.7, 1.3)));
       k.cash += got;
       s.stats.fountainCash += got;
       if (s.stats.fountainCash >= 100) unlock(s, 'WISHING_WELL');
@@ -331,7 +342,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     case 'dumpster': {
       const got = take('dumpster', rand.int(1, 2));
       k.food += got;
-      if (rand.chance(0.12)) k.parts += 1;
+      if (rand.chance(0.12)) k.parts += 5;
       return got > 0;
     }
     case 'vending': {
@@ -340,7 +351,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return (s.pools.vending ?? 0) > 0;
     }
     case 'arcade': {
-      const got = Math.round(take('arcade', (3 + c.handy * 1.6) * rand.range(0.8, 1.2)));
+      const got = Math.round(take('arcade', (4 + stat(s, c, 'handy') * 2.2) * rand.range(0.8, 1.2)));
       k.cash += got;
       shrinkage('funzone', 0.1);
       if (got) c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
@@ -348,42 +359,42 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return got > 0;
     }
     case 'radiohut': {
-      const got = take('radiohut', c.handy >= 4 ? 2 : 1);
+      const got = take('radiohut', stat(s, c, 'handy') >= 4 ? 10 : 5);
       k.parts += got;
-      shrinkage('radiohut', 0.24 * got);
+      shrinkage('radiohut', 0.048 * got);
       return got > 0;
     }
     case 'pallets': {
-      k.parts += take('pallets', rand.int(1, 2));
+      k.parts += take('pallets', rand.int(5, 10));
       return (s.pools.pallets ?? 0) > 0;
     }
     case 'stockroom': {
-      const got = take('stockroom', 1);
+      const got = take('stockroom', 5);
       if (rand.chance(0.2)) k.goods += got;
       else k.parts += got;
-      if (got) raiseAlert(s, 0.08 * stealthy, 'Stockroom counts are off');
+      if (got) raiseSuspicion(s, 0.08 * stealthy, 'Stockroom counts are off');
       return (s.pools.stockroom ?? 0) > 0;
     }
     case 'lostfound': {
       take('lostfound', 1);
       const r = rand.next();
-      if (r < 0.4) k.goods += 1;
+      if (r < 0.4) k.goods += 5;
       else if (r < 0.7) k.cash += rand.int(20, 90);
-      else if (r < 0.85) k.parts += 2;
-      raiseAlert(s, 0.55, 'Lost & Found items missing');
+      else if (r < 0.85) k.parts += 10;
+      raiseSuspicion(s, 0.55, 'Lost & Found items missing');
       return (s.pools.lostfound ?? 0) > 0;
     }
     case 'gary': {
       if (s.food < 2) return false;
       s.food -= 2;
-      s.gary.affinity = Math.min(100, s.gary.affinity + 6 + c.charm * 2);
+      s.gary.affinity = Math.min(100, s.gary.affinity + 6 + stat(s, c, 'charm') * 2);
       s.gary.gifts++;
       s.flags.garyGiftDay = nightKey(s);
       log(s, `${c.name} left a warm Cinnabomb outside the Security Office. Gary's goodwill: ${s.gary.affinity.toFixed(0)}/100.`, 'good');
       return false;
     }
     case 'busk': {
-      const got = Math.round((1 + c.charm) * Math.min(1.6, crowd) * (has(c, 'performer') ? 1.6 : 1) * rand.range(0.6, 1.4));
+      const got = Math.round((1 + stat(s, c, 'charm')) * Math.min(1.6, crowd) * (has(c, 'performer') ? 1.6 : 1) * rand.range(0.6, 1.4));
       k.cash += got;
       if (got) c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       return true;
@@ -399,40 +410,42 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     }
     case 'returns': {
       if (s.goods < 1) return false;
-      s.goods -= 1;
+      const lot = Math.min(LOT, s.goods);
+      s.goods -= lot;
       const pro = has(c, 'returnspro');
-      const got = Math.round(rand.range(50, 80) * (pro ? 1.4 : 1) * (boxingDay ? 1.8 : 1));
+      const got = Math.round(rand.range(50, 80) * (lot / LOT) * (pro ? 1.4 : 1) * (boxingDay ? 1.8 : 1));
       k.cash += got;
-      c.familiarity += pro ? 6 : 12;
-      raiseAlert(s, 0.6, 'Searz loss prevention flagged a return');
+      c.heat += pro ? 4 : 8;
+      raiseSuspicion(s, 0.6, 'Searz loss prevention flagged a return');
       c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       return s.goods > 0;
     }
     case 'kiosk':
     case 'popup': {
       if (s.goods < 1) return false;
-      const chance = (job === 'kiosk' ? 0.3 : 0.42) + c.charm * 0.08;
+      const chance = (job === 'kiosk' ? 0.3 : 0.42) + stat(s, c, 'charm') * 0.08;
       const attempts = job === 'popup' ? 2 : 1;
       for (let i = 0; i < attempts && s.goods > 0; i++) {
         if (rand.chance(Math.min(0.95, chance * Math.min(1.5, crowd) * (has(c, 'salesman') ? 1.5 : 1)))) {
-          s.goods -= 1;
-          const price = Math.round((job === 'kiosk' ? rand.range(40, 60) : rand.range(58, 84)) * (blackFriday ? 1.3 : 1));
+          const lot = Math.min(LOT, s.goods);
+          s.goods -= lot;
+          const price = Math.round((job === 'kiosk' ? rand.range(40, 60) : rand.range(58, 84)) * (lot / LOT) * (blackFriday ? 1.3 : 1));
           k.cash += price;
           c.bubble = { text: `SOLD $${price}`, until: s.time + 8, tone: 'happy' };
           sfx('cash');
         }
       }
-      c.familiarity = Math.max(0, c.familiarity - 3);
+      c.heat = Math.max(0, c.heat - 3);
       return s.goods > 0;
     }
     case 'tinker': {
       const d2 = getDerived(s);
-      if (s.parts < 2 || s.goods >= d2.goodsCap) return false;
-      s.parts -= 2;
-      s.goods += 1;
-      s.stats.goodsCrafted++;
-      c.bubble = { text: '+1 good', until: s.time + 8, tone: 'happy' };
-      return s.parts >= 2 && s.goods < d2.goodsCap;
+      if (s.parts < 2 * LOT || s.goods >= d2.goodsCap) return false;
+      s.parts -= 2 * LOT;
+      s.goods += LOT;
+      s.stats.goodsCrafted += LOT;
+      c.bubble = { text: `+${LOT} goods`, until: s.time + 8, tone: 'happy' };
+      return s.parts >= 2 * LOT && s.goods < d2.goodsCap;
     }
   }
   return false;
@@ -440,7 +453,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
 
 export function baseCycle(s: GameState, c: Crew, job: JobId): number {
   let len = JOB[job].cycle;
-  if (job === 'tinker') len = len / (0.6 + c.handy * 0.2) / (has(c, 'gearhead') ? 1.5 : 1);
+  if (job === 'tinker') len = len / (0.6 + stat(s, c, 'handy') * 0.2) / (has(c, 'gearhead') ? 1.5 : 1) / (getDerived(s).nookOf.get(c.useObj) === 'workshop' ? NOOK_TINKER_SPEED : 1);
   return len / workMult(s);
 }
 
@@ -486,10 +499,16 @@ function pickBed(s: GameState, c: Crew): number | null {
   return null;
 }
 
+const isObstacle = (d: ReturnType<typeof getDerived>, i: number) => {
+  const o = d.objAt.get(i);
+  return !!o && blocksWalking(o);
+};
+
 function randomDeck(s: GameState, near?: { x: number; y: number }): number | null {
+  const d = getDerived(s);
   const tiles: number[] = [];
   for (let i = 0; i < N; i++) {
-    if (!s.deck[i]) continue;
+    if (!s.deck[i] || isObstacle(d, i)) continue;
     if (near && Math.hypot((i % W) - near.x, Math.floor(i / W) - near.y) > 4) continue;
     tiles.push(i);
   }
@@ -503,7 +522,7 @@ function inActiveZone(s: GameState, x: number, y: number): boolean {
 
 function decide(s: GameState, c: Crew) {
   const job = planJob(s, c);
-  const canWork = job !== 'rest' && c.energy > 15;
+  const canWork = job !== 'rest';
   const phase = phaseAt(s.time);
 
   if (c.layer === 0) {
@@ -515,10 +534,40 @@ function decide(s: GameState, c: Crew) {
     }
     return;
   }
+  if (c.energy > ERRAND_MIN_ENERGY && startErrand(s, c)) return;
   if (canWork) return startWork(s, c, job);
   const sleepy = c.energy < 40 || (phase === 'night' && c.energy < 92) || (phase !== 'open' && c.energy < 70);
   if (sleepy) return startSleep(s, c);
   startLeisure(s, c);
+}
+
+const ERRAND_MIN_ENERGY = 15;
+const ERRAND_MINUTES = 6;
+
+const onErrand = (c: Crew) => c.state === 'toErrand' || c.state === 'errand';
+
+export const pendingErrands = (s: GameState) => s.objects.filter((o) => BUILD[o.type].floor && !o.delivered);
+
+function startErrand(s: GameState, c: Crew): boolean {
+  const o = pendingErrands(s).find((p) => !s.crew.some((x) => x.useObj === p.id && onErrand(x)));
+  if (!o || !goTo(s, c, [nodeOf(0, o.x, o.y)])) return false;
+  c.useObj = o.id;
+  c.state = 'toErrand';
+  setThought(c, `Carrying a ${BUILD[o.type].name} down`);
+  return true;
+}
+
+function finishErrand(s: GameState, c: Crew) {
+  const o = s.objects.find((x) => x.id === c.useObj);
+  c.useObj = -1;
+  if (o) {
+    const def = BUILD[o.type];
+    o.delivered = true;
+    if (def.lastsDays) o.expires = s.time + def.lastsDays * 1440;
+    markDirty();
+    log(s, `${c.name} set up the ${def.name}.`, 'good', { x: o.x, y: o.y, layer: 0 });
+  }
+  startHome(s, c, 'Errand done. Heading home');
 }
 
 function startWork(s: GameState, c: Crew, job: JobId) {
@@ -552,23 +601,62 @@ function startLeisure(s: GameState, c: Crew) {
   const options = d.leisure.filter((o) => !s.crew.some((x) => x !== c && x.useObj === o.id && (x.state === 'leisure' || x.state === 'toLeisure')));
   if (options.length && rand.chance(0.75)) {
     const o = rand.pick(options);
-    if (goTo(s, c, [nodeOf(1, o.x, o.y)])) {
+    const spots = useSpots(s, o);
+    if (spots.length && goTo(s, c, spots)) {
       c.useObj = o.id;
       c.state = 'toLeisure';
-      setThought(c, o.type === 'tv' ? 'Playing Vice City' : o.type === 'arcade' ? 'Going for the Galaga high score' : o.type === 'throne' ? 'Sitting on the throne' : 'Staring at the lava lamp');
+      setThought(c, BUILD[o.type].hangout!);
       return;
     }
   }
-  const t = randomDeck(s);
-  if (t !== null && goTo(s, c, [t])) {
+  const stroll = strollTarget(s, c);
+  if (stroll && goTo(s, c, [stroll.node])) {
     c.useObj = -1;
     c.state = 'toLeisure';
-    setThought(c, rand.pick(['Pacing the plywood', 'Writing in a LiveJournal', 'Listening to the muzak below', 'Counting ceiling tiles', 'Playing Snake on a Nokia']));
+    setThought(c, stroll.thought);
     return;
   }
   c.state = 'leisure';
   c.timer = 30;
 }
+
+const STROLL_RADIUS = 5;
+const HANGOUT_RADIUS = 1.6;
+const IDLE_THOUGHTS = ['Pacing the plywood', 'Writing in a LiveJournal', 'Listening to the muzak below', 'Counting ceiling tiles', 'Playing Snake on a Nokia'];
+
+const lounging = (c: Crew) => c.layer === 1 && c.state === 'leisure';
+
+function strollTarget(s: GameState, c: Crew): { node: number; thought: string } | null {
+  const pals = s.crew.filter((x) => x !== c && lounging(x) && Math.hypot(x.x - c.x, x.y - c.y) < STROLL_RADIUS * 2);
+  if (pals.length && rand.chance(0.45)) {
+    const pal = rand.pick(pals);
+    const spot = openDeckNear(s, c, pal.x, pal.y, HANGOUT_RADIUS, 0.9);
+    if (spot !== null) return { node: spot, thought: `Hanging out with ${pal.name}` };
+  }
+  const spot = openDeckNear(s, c, c.x, c.y, STROLL_RADIUS, 1.5);
+  return spot === null ? null : { node: spot, thought: rand.pick(IDLE_THOUGHTS) };
+}
+
+function openDeckNear(s: GameState, c: Crew, x: number, y: number, maxR: number, minR: number): number | null {
+  const taken = new Set(s.crew.filter((o) => o !== c).flatMap((o) => [o.goal, agentNode(o)]));
+  const derived = getDerived(s);
+  const tiles: number[] = [];
+  for (let i = 0; i < N; i++) {
+    if (!s.deck[i] || taken.has(N + i) || isObstacle(derived, i)) continue;
+    const d = Math.hypot((i % W) + 0.5 - x, Math.floor(i / W) + 0.5 - y);
+    if (d >= minR && d <= maxR) tiles.push(N + i);
+  }
+  return tiles.length ? rand.pick(tiles) : null;
+}
+
+function faceNearestPal(s: GameState, c: Crew) {
+  const pal = s.crew.find((x) => x !== c && x.layer === 1 && x.state !== 'away' && Math.hypot(x.x - c.x, x.y - c.y) <= HANGOUT_RADIUS + 0.5);
+  if (pal) c.facing = Math.atan2(pal.y - c.y, pal.x - c.x);
+}
+
+const STROLL_PACE = 0.65;
+const strideOf = (c: Crew) => 0.92 + ((c.id * 37) % 17) / 100;
+const paceOf = (c: Crew) => crewSpeed(c) * strideOf(c) * (c.state === 'toLeisure' ? STROLL_PACE : 1);
 
 export function updateCrew(s: GameState, c: Crew, dt: number) {
   if (c.state === 'away') {
@@ -587,7 +675,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
   const night = phase === 'night';
   const working = c.state === 'working' || c.state === 'toWork';
   if (c.state === 'sleeping') {
-    const bedBonus = c.bedId >= 0 ? 14 : 7;
+    const bedBonus = c.bedId < 0 ? 7 : getDerived(s).nookOf.get(c.bedId) === 'bunkroom' ? 14 * NOOK_SLEEP_SPEED : 14;
     c.energy = Math.min(100, c.energy + (bedBonus * (has(c, 'lightsleeper') ? 1.3 : 1) * dt) / 60);
   } else {
     let drain = working ? 6 : 4.2;
@@ -653,7 +741,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     }
   } else c.hiding = false;
 
-  const moving = ['toWork', 'toHome', 'toBed', 'toLeisure', 'evacuating'].includes(c.state);
+  const moving = ['toWork', 'toHome', 'toBed', 'toLeisure', 'toErrand', 'evacuating'].includes(c.state);
   if (moving) {
     const next = c.path[c.pathI];
     if (c.layer === 1 && next !== undefined && next < N && c.climb <= 0) {
@@ -668,6 +756,17 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     if (c.layer === 0 && next !== undefined && next < N && phaseAt(s.time) !== 'open' && c.climb <= 0) {
       const nx = (next % W) + 0.5;
       const ny = Math.floor(next / W) + 0.5;
+      const here = crewDanger[idx(Math.floor(c.x), Math.floor(c.y))];
+      if (s.time >= c.replanAt && c.state !== 'evacuating') {
+        c.replanAt = s.time + REPLAN_MINUTES;
+        if (c.path.slice(c.pathI, c.pathI + LOOKAHEAD).some((n) => n < N && crewDanger[n] > 0) && c.goal >= 0) goTo(s, c, [c.goal]);
+      }
+      if (crewDanger[next] >= GUARD_WAIT_DANGER && here < GUARD_WAIT_DANGER / 2 && c.camWait < MAX_WAIT) {
+        c.camWait += dt;
+        c.moving = false;
+        setThought(c, 'Waiting for the guard to look away');
+        return;
+      }
       if (cameraWatching(s, nx, ny) && !cameraWatching(s, c.x, c.y) && c.camWait < 25) {
         c.camWait += dt;
         c.moving = false;
@@ -676,7 +775,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       }
     }
     if (c.camWait > 0 && c.moving !== false) c.camWait = Math.max(0, c.camWait - dt * 0.5);
-    const arrived = moveAgent(c, crewSpeed(c), dt);
+    const arrived = moveAgent(c, paceOf(c), dt);
     if (c.moving) c.camWait = Math.max(0, c.camWait - dt);
     if (prevLayer === 0 && c.layer === 1) deposit(s, c);
     if (!arrived) {
@@ -699,8 +798,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         c.state = 'working';
         c.workTimer = cycleLength(s, c, job);
         if (job === 'tinker') {
-          const bench = getDerived(s).objAt.get(idx(Math.floor(c.x), Math.floor(c.y)));
+          const bench = freeBenches(s, c).find((b) => touching(c, b));
           c.useObj = bench?.id ?? -1;
+          if (bench) faceObject(c, bench);
         }
         setThought(c, JOB[job].name);
         return;
@@ -715,8 +815,23 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         return;
       case 'toLeisure':
         c.state = 'leisure';
-        c.timer = rand.range(40, 90);
+        if (c.useObj >= 0) {
+          c.timer = rand.range(40, 90);
+          const o = s.objects.find((x) => x.id === c.useObj);
+          if (o && !BUILD[o.type].seat) faceObject(c, o);
+        } else {
+          c.timer = rand.range(12, 35);
+          faceNearestPal(s, c);
+        }
         return;
+      case 'toErrand': {
+        const o = s.objects.find((x) => x.id === c.useObj);
+        if (!o) return startHome(s, c, 'Errand cancelled. Heading home');
+        c.state = 'errand';
+        c.timer = ERRAND_MINUTES;
+        setThought(c, `Setting up the ${BUILD[o.type].name}`);
+        return;
+      }
     }
     return;
   }
@@ -724,11 +839,12 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
   switch (c.state) {
     case 'working': {
       const job = currentJob(s, c);
-      if (job !== c.activeJob || c.energy < 10) {
+      if (job !== c.activeJob) {
         c.useObj = -1;
         return c.layer === 0 && job === 'rest' ? startHome(s, c, 'Shift over. Heading home') : decide(s, c);
       }
       c.workTimer -= dt;
+      if (c.energy <= 0 && c.thought !== 'Overworked') setThought(c, 'Overworked');
       if (job === 'tinker' && c.useObj >= 0) {
         const bench = s.objects.find((o) => o.id === c.useObj);
         if (bench) bench.usedUntil = s.time + 2;
@@ -741,6 +857,11 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         }
         c.workTimer = cycleLength(s, c, job);
       }
+      return;
+    }
+    case 'errand': {
+      c.timer -= dt;
+      if (c.timer <= 0) finishErrand(s, c);
       return;
     }
     case 'eating': {
@@ -795,7 +916,7 @@ export function recallCrew(s: GameState, c: Crew) {
   if (c.state === 'away' || c.state === 'fleeing') return;
   c.waitUntil = s.time + 120;
   c.useObj = -1;
-  if (c.layer === 0) startHome(s, c, 'Recalled. Heading home');
+  if (c.layer === 0) startHome(s, c, 'Calling it. Heading home');
   else {
     c.state = 'idle';
     c.timer = 0;
@@ -817,31 +938,36 @@ function escaped(s: GameState, c: Crew) {
   s.stats.spotted++;
   s.spottedTonight = true;
   deposit(s, c);
-  raiseAlert(s, 3, `${c.name} was seen fleeing into the ceiling`);
+  raiseSuspicion(s, 3, `${c.name} was seen fleeing into the ceiling`);
   log(s, `${c.name} made it back up. That was close.`, 'warn', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 1 });
   sfx('escape');
   for (const n of s.npcs) if (n.chaseId === c.id) n.state = 'search';
 }
 
 export const BAIL_HOURS = 8;
+const REPLAN_MINUTES = 3;
+const LOOKAHEAD = 5;
+const GUARD_WAIT_DANGER = 8;
+const MAX_WAIT = 25;
 
-export function crewCaught(s: GameState, c: Crew, byName: string) {
+export function crewCaught(s: GameState, c: Crew, byName: string, story = `${byName} caught ${c.name} red-handed in the mall after hours. The police were called.`) {
   c.state = 'away';
   c.awayUntil = Infinity;
   c.path = [];
   c.carrying = { cash: 0, food: 0, parts: 0, goods: 0 };
   c.detect = 0;
   c.bedId = -1;
+  c.heat = HEAT_AFTER_ARREST;
   s.stats.caught++;
   s.spottedTonight = true;
-  raiseAlert(s, 8, `${c.name} was caught by ${byName}`);
+  raiseSuspicion(s, 8, `${c.name} was caught by ${byName}`);
   sfx('caught');
   const bail = 60 + s.crew.length * 15;
   s.modals.push({
     id: s.nextId++,
     title: `${c.name} got caught`,
     art: 'caught',
-    body: `${byName} caught ${c.name} red-handed in the mall after hours. The police were called. ${c.name} didn't say a word about the ceiling.\n\nPost bail and they're out today, back in the ceiling in ${BAIL_HOURS} hours. Or let them sit it out in county for five days.`,
+    body: `${story} ${c.name} didn't say a word about the ceiling.\n\nPost bail and they're out today, back in the ceiling in ${BAIL_HOURS} hours. Or let them sit it out in county for five days.`,
     choices: [
       { label: `Post bail ($${bail})`, action: `bail:${c.id}:${bail}`, disabled: s.cash < bail ? 'Not enough cash' : undefined },
       { label: 'Let them sit it out (5 days)', action: `wait:${c.id}` },
@@ -856,22 +982,43 @@ export function crewLeaves(s: GameState, c: Crew, reason: string) {
   sfx('bad');
 }
 
-export function familiarityTick(s: GameState, c: Crew, rate: number, dt: number) {
+export const HEAT_FADE_PER_DAY = 15;
+const SPOTTED_HEAT = 15;
+const HEAT_AFTER_ARREST = 40;
+export const HEAT_WARNING = 75;
+
+export function heatTick(s: GameState, c: Crew, rate: number, dt: number) {
   const mult = has(c, 'invisible') ? 0.1 : 1;
   const crackdown = (s.flags.crackdownUntil ?? 0) > s.time ? 2 : 1;
   const halloween = s.flags.costumeDay === dayOf(s.time) ? 0 : 1;
-  c.familiarity = Math.min(100, Math.max(0, c.familiarity + rate * mult * crackdown * halloween * dt));
-  if (c.familiarity >= 100) {
-    c.familiarity = 50;
-    c.bannedUntil = s.time + 3 * 1440;
-    raiseAlert(s, 3, `Officer Dana is suspicious of ${c.name}`);
-    log(s, `Officer Dana stopped ${c.name}: "You're here every single day. You got a home?" ${c.name} is laying low from day jobs for 3 days.`, 'bad', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 });
-    startHome(s, c, 'Spooked by the mall cop');
-  }
+  const before = c.heat;
+  addHeat(c, rate * mult * crackdown * halloween * dt);
+  if (before < HEAT_WARNING && c.heat >= HEAT_WARNING)
+    log(s, `Officer Dana is watching ${c.name} closely. Rest them by day to cool off before she makes a call.`, 'bad', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 });
+  if (c.heat >= 100 && c.state !== 'away') crewArrestedByDay(s, c);
+}
+
+export function addHeat(c: Crew, amount: number) {
+  c.heat = Math.min(100, Math.max(0, c.heat + amount));
+}
+
+export function coolHeat(c: Crew, dt: number) {
+  const lyingLow = c.dayJob === 'rest' ? 2 : 1;
+  addHeat(c, (-HEAT_FADE_PER_DAY * lyingLow * dt) / 1440);
+}
+
+export function spottedHeat(c: Crew) {
+  addHeat(c, SPOTTED_HEAT);
+}
+
+export const heatDetectMult = (c: Crew) => 1 + c.heat / 200;
+
+function crewArrestedByDay(s: GameState, c: Crew) {
+  crewCaught(s, c, 'Officer Dana', `Officer Dana has seen ${c.name} in the mall every day for weeks. Today she ran their name, found nothing, and called the police anyway.`);
 }
 
 export function idleBubble(s: GameState, c: Crew) {
-  if (c.layer !== 1 || c.bubble && c.bubble.until > s.time) return;
+  if (c.layer !== 1 || (c.bubble && c.bubble.until > s.time)) return;
   if (c.state === 'sleeping' && has(c, 'snorer')) c.bubble = { text: 'ZZZ', until: s.time + 6 };
   else if (c.state === 'sleeping' && rand.chance(0.05)) c.bubble = { text: 'z', until: s.time + 5 };
 }

@@ -19,7 +19,8 @@
     "dist": "npm run build && electron-builder --mac --win",
     "balance": "bun scripts/bot.ts",
     "art:generate": "bun scripts/art/generate.ts",
-    "art:build": "bun scripts/art/build.ts"
+    "art:build": "bun scripts/art/build.ts",
+    "deploy": "npx vercel@latest deploy --prod --yes --project mall-bats"
   },
   "build": {
     "appId": "com.jacobgoldfarb.dropceiling",

@@ -558,6 +558,78 @@ button {
   width: 100%;
 }
 
+.meter.rank {
+  position: relative;
+  width: 170px;
+  cursor: pointer;
+}
+
+.level-list {
+  position: absolute;
+  top: 54px;
+  left: -10px;
+  width: 340px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 8px 10px;
+  z-index: 40;
+  cursor: default;
+}
+
+.level-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  padding: 5px 0;
+  border-bottom: 2px solid var(--plum-2);
+  color: var(--muted);
+}
+
+.level-row:last-child {
+  border-bottom: 0;
+}
+
+.level-row b {
+  font-family: var(--display);
+  font-weight: normal;
+  font-size: 18px;
+}
+
+.level-row .level-earned {
+  font-family: var(--led);
+  font-size: 16px;
+}
+
+.level-row i {
+  grid-column: 1 / -1;
+  font-family: var(--label);
+  font-style: normal;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+
+.level-row small {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+.level-row.done {
+  color: var(--text);
+}
+
+.level-row.done .level-earned {
+  color: var(--green-hi);
+}
+
+.level-row.next {
+  color: var(--cream);
+}
+
+.level-row.next b,
+.level-row.next i {
+  color: var(--pink-4);
+}
+
 .alert {
   width: 200px;
   flex-shrink: 1;
@@ -857,6 +929,20 @@ button {
 
 .tag.beds {
   color: #9dc9ff;
+}
+
+.tag.set {
+  color: var(--gold);
+}
+
+.nook .nook-bonus {
+  font-family: var(--label);
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.nook.formed {
+  box-shadow: inset 3px 0 0 var(--green-hi);
 }
 
 .flavor {
@@ -1408,7 +1494,7 @@ button {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
-  min-height: 28px;
+  min-height: 32px;
   padding: 3px;
   background: var(--ink);
 }
@@ -2264,6 +2350,174 @@ button {
     var(--drop);
 }
 
+.levelup {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 70;
+  pointer-events: none;
+  animation: levelup-out 0.4s steps(4) 4.8s forwards;
+}
+
+.levelup-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 620px;
+  height: 620px;
+  margin: -310px 0 0 -310px;
+  background: repeating-conic-gradient(rgba(255, 201, 62, 0.35) 0 9deg, transparent 9deg 22.5deg);
+  mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  animation:
+    fadein 0.4s,
+    levelup-spin 14s linear infinite;
+}
+
+.levelup-card {
+  position: relative;
+  min-width: 300px;
+  max-width: 420px;
+  padding: 12px 30px 16px;
+  text-align: center;
+  color: var(--ink);
+  background: var(--gold);
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow:
+    var(--outline-3),
+    inset 0 4px 0 #fff27d,
+    inset 0 -5px 0 var(--gold-lo),
+    var(--drop);
+  animation: levelup-in 0.55s steps(7);
+}
+
+.levelup-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -80px;
+  width: 48px;
+  background: rgba(255, 255, 255, 0.6);
+  transform: skewX(-20deg);
+  animation: levelup-shine 0.8s steps(8) 0.55s;
+}
+
+.levelup-kicker {
+  font-family: var(--display);
+  font-size: 24px;
+  letter-spacing: 4px;
+  color: var(--pink-1);
+  animation: blink 0.5s steps(1) 4;
+}
+
+.levelup-level {
+  font-family: var(--display);
+  font-size: 92px;
+  line-height: 0.8;
+  color: var(--cream);
+  text-shadow:
+    3px 0 var(--ink),
+    -3px 0 var(--ink),
+    0 3px var(--ink),
+    0 -3px var(--ink),
+    0 8px var(--gold-lo);
+}
+
+.levelup-title {
+  margin-top: 6px;
+  font-family: var(--display);
+  font-size: 38px;
+  line-height: 0.9;
+  letter-spacing: 1px;
+}
+
+.levelup-theme {
+  font-family: var(--label);
+  font-size: 20px;
+  color: var(--plum-2);
+}
+
+.levelup-unlocks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.levelup-unlocks b {
+  padding: 1px 6px;
+  color: var(--cream);
+  background: var(--pink-2);
+}
+
+.levelup-unlocks span {
+  padding: 1px 6px;
+  background: rgba(13, 10, 18, 0.14);
+}
+
+.levelup-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--color);
+  box-shadow: var(--outline);
+  opacity: 0;
+  animation: levelup-spark 0.9s steps(9) 0.25s;
+}
+
+@keyframes levelup-in {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(0.94);
+  }
+}
+
+@keyframes levelup-shine {
+  to {
+    left: 110%;
+  }
+}
+
+@keyframes levelup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes levelup-spark {
+  from {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(-60px) scale(1.6);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(calc(-1 * var(--reach))) scale(0);
+  }
+}
+
+@keyframes levelup-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -60%);
+  }
+}
+
 /* title */
 .title-screen {
   position: fixed;
@@ -2576,4 +2830,13 @@ button {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text);
+}
+
+.dots i.up {
+  box-shadow: 0 0 0 1px var(--cream);
+}
+
+.dots i.down {
+  background: var(--red-hi) !important;
+  opacity: 0.5;
 }

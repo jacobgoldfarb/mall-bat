@@ -1,10 +1,27 @@
-import { JOB } from './defs';
-import { agentNode, crewCaught, familiarityTick, goTo, has, makeLook, moveAgent, startFlee, currentJob } from './crew';
-import { E_STAFF, LAYOUT, N, W, edgeBetween, idx, type Waypoint } from './layout';
-import { alertLevel, log, notify, rand, raiseAlert, sfx } from './ops';
-import type { Crew, GameState, Npc, NpcKind } from './state';
+import { BUILD, JOB } from './defs';
+import { stat } from './needs';
+import { agentNode, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
+import { E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds, type Waypoint } from './layout';
+import { suspicionLevel, log, notify, rand, raiseSuspicion, sfx } from './ops';
+import type { Crew, GameState, Npc, NpcKind, Placed } from './state';
 import { dayOf, phaseAt } from './time';
-import { ACCESS_SHOPPER, ACCESS_STAFF, CAMERA_FOV, CAMERA_RANGE, cameraAngle, coneSees, getDerived, lineOfSight, mallWalkable, nearestWalkableInRoom, nodeOf, roomTiles } from './world';
+import {
+  ACCESS_SHOPPER,
+  ACCESS_STAFF,
+  CAMERA_FOV,
+  CAMERA_RANGE,
+  cameraAngle,
+  cameraLive,
+  coneSees,
+  crewDanger,
+  getDerived,
+  lineOfSight,
+  mallWalkable,
+  markDirty,
+  nearestWalkableInRoom,
+  nodeOf,
+  roomTiles,
+} from './world';
 import { revealInspection } from './inspect';
 
 export function spawnNpc(s: GameState, kind: NpcKind, x: number, y: number, extra: Partial<Npc> = {}): Npc {
@@ -80,7 +97,12 @@ function randomStoreTile(s: GameState): number | null {
 
 export function spawnShopper(s: GameState) {
   const fromAnchor = rand.chance(0.3);
-  const spot = fromAnchor ? rand.pick([{ x: 2, y: 13 }, { x: 45, y: 13 }]) : rand.pick(LAYOUT.shopperEntrances);
+  const spot = fromAnchor
+    ? rand.pick([
+        { x: 2, y: 13 },
+        { x: 45, y: 13 },
+      ])
+    : rand.pick(LAYOUT.shopperEntrances);
   const n = spawnNpc(s, 'shopper', spot.x, spot.y, { speed: rand.range(0.22, 0.32) });
   const count = rand.int(1, 3);
   for (let i = 0; i < count; i++) {
@@ -173,7 +195,7 @@ function guardHear(s: GameState, n: Npc, noise: Float32Array) {
   sfx('huh');
   const ri = LAYOUT.roomAt[i];
   if (ri >= 0) s.rooms[ri].complaint += 12;
-  raiseAlert(s, 1, `${n.name} heard something in the ceiling`);
+  raiseSuspicion(s, 1, `${n.name} heard something in the ceiling`);
   log(s, `${n.name} stopped under ${LAYOUT.rooms[ri]?.name ?? 'the ceiling'}: "...did that ceiling just creak?"`, 'warn', { x: Math.floor(n.x), y: Math.floor(n.y), layer: 0 });
 }
 
@@ -300,7 +322,11 @@ function updateInspector(s: GameState, n: Npc, dt: number) {
 
 export function startInspector(s: GameState, insId: number) {
   const ins = s.inspections.find((i) => i.id === insId)!;
-  const n = spawnNpc(s, 'inspector', 10, 1, { name: ins.kind === 'fire' ? 'Fire Marshal' : ins.kind === 'pest' ? 'Pest Control' : ins.kind === 'sweep' ? 'Police' : 'Dale (Maintenance)', inspectionId: ins.id, speed: 0.32 });
+  const n = spawnNpc(s, 'inspector', 10, 1, {
+    name: ins.kind === 'fire' ? 'Fire Marshal' : ins.kind === 'pest' ? 'Pest Control' : ins.kind === 'sweep' ? 'Police' : 'Dale (Maintenance)',
+    inspectionId: ins.id,
+    speed: 0.32,
+  });
   const spot = nearestWalkableInRoom(ins.room, ins.x, ins.y);
   if (goTo(s, n, [nodeOf(0, spot.x, spot.y)], ACCESS_STAFF)) {
     n.state = 'walk';
@@ -343,8 +369,89 @@ function seesCrew(nx: number, ny: number, facing: number, fov: number, range: nu
 export function guardCone(n: Npc, s: GameState): { fov: number; range: number } {
   if (n.kind === 'dayguard') return { fov: 1.5, range: 6.5 };
   if (n.kind === 'janitor') return { fov: 1.6, range: 4 };
-  const lvl = alertLevel(s.alert);
+  const lvl = suspicionLevel(s.suspicion);
   return { fov: 1.05, range: 6 + (n.dog ? 1.5 : 0) + (lvl >= 3 ? 0.8 : 0) };
+}
+
+const GUARD_SIGHT_DANGER = 10;
+const GUARD_NEAR_DANGER = 10;
+const GUARD_AHEAD_DANGER = 5;
+const CAMERA_DANGER = 3;
+
+function markDanger(cx: number, cy: number, r: number, weight: (x: number, y: number) => number) {
+  for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(H - 1, Math.ceil(cy + r)); y++)
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++) crewDanger[idx(x, y)] += weight(x + 0.5, y + 0.5);
+}
+
+export function updateCrewDanger(s: GameState) {
+  crewDanger.fill(0);
+  if (phaseAt(s.time) === 'open') return;
+  for (const n of s.npcs) {
+    if ((n.kind !== 'guard' && n.kind !== 'janitor') || n.state === 'asleep' || n.state === 'offduty') continue;
+    const cone = guardCone(n, s);
+    markDanger(n.x, n.y, cone.range + 1, (x, y) => GUARD_SIGHT_DANGER * coneSees(n.x, n.y, n.facing, cone.fov, cone.range + 1, x, y) + (Math.hypot(x - n.x, y - n.y) < 2.5 ? GUARD_NEAR_DANGER : 0));
+    for (const node of n.path.slice(n.pathI, n.pathI + 6)) {
+      if (node >= N) continue;
+      const px = node % W;
+      const py = Math.floor(node / W);
+      markDanger(px + 0.5, py + 0.5, 1.5, (x, y) => (inBounds(Math.floor(x), Math.floor(y)) && Math.hypot(x - px - 0.5, y - py - 0.5) <= 1.5 ? GUARD_AHEAD_DANGER : 0));
+    }
+  }
+  if ((s.flags.blackoutUntil ?? 0) > s.time) return;
+  for (const cam of s.cameras) {
+    if (!cameraLive(s, cam)) continue;
+    markDanger(cam.x, cam.y, CAMERA_RANGE, (x, y) => (coneSees(cam.x, cam.y, cam.angle, CAMERA_FOV + cam.sweep * 2, CAMERA_RANGE, x, y, 0) > 0 ? CAMERA_DANGER : 0));
+  }
+}
+
+const BAG_SPOT_RANGE = 2.5;
+const BAG_SUSPICION = 4;
+const BAG_FEED_NOTICED_PER_HOUR = 0.04;
+const DECOY_REACH = 1.2;
+
+export function updateMallItems(s: GameState) {
+  const night = phaseAt(s.time) === 'night';
+  for (const o of [...s.objects]) {
+    if (!o.delivered) continue;
+    if (o.expires !== undefined && o.expires <= s.time) {
+      removeFloorItem(s, o, `The janitor folded up your ${BUILD[o.type].name}.`);
+      continue;
+    }
+    if (o.type === 'out_of_order') {
+      const guard = s.npcs.find((n) => (n.kind === 'guard' || n.kind === 'dayguard') && n.state !== 'asleep' && n.state !== 'offduty' && Math.hypot(n.x - o.x - 0.5, n.y - o.y - 0.5) < BAG_SPOT_RANGE);
+      if (guard) {
+        removeFloorItem(s, o, `${guard.name} tore the bag off a camera.`, 'warn');
+        raiseSuspicion(s, BAG_SUSPICION, `${guard.name} found a bagged camera`);
+      } else if (night && rand.chance(BAG_FEED_NOTICED_PER_HOUR / 60)) {
+        removeFloorItem(s, o, 'Someone noticed a dead camera feed. The bag is gone.', 'warn');
+        raiseSuspicion(s, BAG_SUSPICION, 'A camera feed went dark');
+      }
+    }
+    if (o.type === 'tamagotchi' && night) lureGuard(s, o);
+  }
+}
+
+function lureGuard(s: GameState, o: Placed) {
+  const lured = s.npcs.find((n) => n.id === o.luredBy);
+  if (lured && (lured.state === 'investigate' || lured.state === 'search')) {
+    if (Math.hypot(lured.x - o.x - 0.5, lured.y - o.y - 0.5) < DECOY_REACH)
+      removeFloorItem(s, o, `${lured.name} found the Tamagotchi and pocketed it. He's going to raise it.`, 'good');
+    return;
+  }
+  const guards = s.npcs.filter((n) => n.kind === 'guard' && (n.state === 'patrol' || n.state === 'wait'));
+  const nearest = guards.sort((a, b) => Math.hypot(a.x - o.x, a.y - o.y) - Math.hypot(b.x - o.x, b.y - o.y))[0];
+  if (!nearest || !goTo(s, nearest, [nodeOf(0, o.x, o.y)], ACCESS_STAFF)) return;
+  o.luredBy = nearest.id;
+  nearest.state = 'investigate';
+  nearest.lastSeen = { x: o.x + 0.5, y: o.y + 0.5, t: s.time };
+  nearest.bubble = { text: 'beep?', until: s.time + 10, tone: 'info' };
+  log(s, `${nearest.name} heard beeping and went to look.`, 'good', { x: o.x, y: o.y, layer: 0 });
+}
+
+function removeFloorItem(s: GameState, o: Placed, text: string, kind: 'info' | 'warn' | 'good' = 'info') {
+  s.objects = s.objects.filter((x) => x !== o);
+  markDirty();
+  log(s, text, kind, { x: o.x, y: o.y, layer: 0 });
 }
 
 export function detection(s: GameState, dt: number) {
@@ -353,7 +460,7 @@ export function detection(s: GameState, dt: number) {
   const diff = DIFF_DETECT[s.difficulty];
   const teamRoutes = s.crew.some((c) => has(c, 'routes') && c.state !== 'away') ? 0.85 : 1;
   const blackout = (s.flags.blackoutUntil ?? 0) > s.time;
-  const lvl = alertLevel(s.alert);
+  const lvl = suspicionLevel(s.suspicion);
 
   for (const c of s.crew) {
     if (c.layer !== 0 || c.state === 'away' || c.climb > 0) {
@@ -370,7 +477,7 @@ export function detection(s: GameState, dt: number) {
         const backstage = ['service', 'maint', 'security', 'office', 'dock'].includes(kind);
         const job = currentJob(s, c);
         const rate = backstage ? 3 : c.state === 'working' ? JOB[job].sketch : 0.06;
-        if (rate !== 0) familiarityTick(s, c, rate, dt);
+        if (rate !== 0) heatTick(s, c, rate, dt);
         if (backstage && (c.bubble?.until ?? 0) < s.time) {
           c.bubble = { text: '...', until: s.time + 6 };
           n.bubble = { text: 'Hey!', until: s.time + 6, tone: 'alert' };
@@ -384,7 +491,13 @@ export function detection(s: GameState, dt: number) {
     let bestSource: Npc | null = null;
     let bestRate = 0;
     let cameraHit = -1;
-    const stealthMod = (1.3 - c.stealth * 0.15) * (c.hiding ? 0.3 + c.stealth * 0.03 : c.state === 'working' ? 1.15 : 1) * (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? 0.7 : 1) * teamRoutes * diff;
+    const stealthMod =
+      (1.3 - stat(s, c, 'stealth') * 0.15) *
+      (c.hiding ? 0.3 + stat(s, c, 'stealth') * 0.03 : c.state === 'working' ? 1.15 : 1) *
+      (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? 0.7 : 1) *
+      teamRoutes *
+      diff *
+      heatDetectMult(c);
     for (const n of s.npcs) {
       if (n.kind !== 'guard' && n.kind !== 'janitor') continue;
       if (n.state === 'asleep' || n.state === 'offduty') continue;
@@ -404,7 +517,7 @@ export function detection(s: GameState, dt: number) {
     }
     if (!blackout) {
       s.cameras.forEach((cam, ci) => {
-        if (!cam.active) return;
+        if (!cameraLive(s, cam)) return;
         const vis = coneSees(cam.x, cam.y, cameraAngle(cam, s.time), CAMERA_FOV, CAMERA_RANGE, c.x, c.y, 0);
         if (vis) {
           rate += 0.55 * vis * stealthMod;
@@ -424,6 +537,7 @@ export function detection(s: GameState, dt: number) {
 
     if (c.detect >= 1 && c.state !== 'fleeing') {
       c.detect = 1;
+      spottedHeat(c);
       const tile = { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 as const };
       sfx('spotted');
       if (bestSource && bestSource.kind === 'guard') {
@@ -437,7 +551,7 @@ export function detection(s: GameState, dt: number) {
         const reporter = bestSource ? 'A janitor' : `Camera ${cameraHit + 1}`;
         if (bestSource) bestSource.bubble = { text: '!', until: s.time + 15, tone: 'alert' };
         if (cameraHit >= 0) s.cameras[cameraHit].cooldown = s.time + 30;
-        raiseAlert(s, bestSource ? 2 : 3, `${reporter} saw someone after hours`);
+        raiseSuspicion(s, bestSource ? 2 : 3, `${reporter} saw someone after hours`);
         log(s, `${reporter} spotted ${c.name}. Security is on the way.`, 'bad', tile);
         const guard = s.npcs.find((n) => n.kind === 'guard' && n.state !== 'chase' && n.state !== 'asleep' && n.state !== 'offduty');
         if (guard) {
@@ -465,8 +579,8 @@ export function staffDoorCheck(s: GameState, c: Crew, fromNode: number, toNode: 
     if (n.kind !== 'dayguard') continue;
     const cone = guardCone(n, s);
     if (seesCrew(n.x, n.y, n.facing, cone.fov, cone.range, c)) {
-      familiarityTick(s, c, 14, 1);
-      raiseAlert(s, 1, `${c.name} used the Employees Only door in front of Officer Dana`);
+      heatTick(s, c, 14, 1);
+      raiseSuspicion(s, 1, `${c.name} used the Employees Only door in front of Officer Dana`);
       n.bubble = { text: 'Employees only!', until: s.time + 10, tone: 'alert' };
     }
   }
@@ -474,7 +588,7 @@ export function staffDoorCheck(s: GameState, c: Crew, fromNode: number, toNode: 
 
 export function ensureStaff(s: GameState) {
   const phase = phaseAt(s.time);
-  const lvl = alertLevel(s.alert);
+  const lvl = suspicionLevel(s.suspicion);
   const guards = s.npcs.filter((n) => n.kind === 'guard' && n.state !== 'offduty');
   const nightShift = phase === 'night' || phase === 'closing';
   if (nightShift) {

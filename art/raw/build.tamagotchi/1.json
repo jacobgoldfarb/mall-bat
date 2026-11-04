@@ -1,0 +1,12 @@
+{
+  "prompt": "tiny egg shaped pink tamagotchi toy with a small lcd screen lying on the floor, a keychain loop. isometric pixel art game prop, 2004 american shopping mall, cozy quirky, light from upper left, transparent background, no text, scavenged, makeshift, lived-in",
+  "seed": 92768477,
+  "width": 32,
+  "height": 32,
+  "style": {
+    "outline": "selective outline",
+    "shading": "medium shading",
+    "detail": "medium detail",
+    "isometric": true
+  }
+}

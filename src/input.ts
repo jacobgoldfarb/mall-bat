@@ -1,4 +1,4 @@
-import { app, refresh, selectBuild, selectObject, toast, SPEEDS } from './app';
+import { app, buildLayer, refresh, selectBuild, selectObject, toast, SPEEDS } from './app';
 import { audio } from './audio/audio';
 import { shiftNow } from './game/crew';
 import { BUILD } from './game/defs';
@@ -72,8 +72,8 @@ export function attachInput(canvas: HTMLCanvasElement) {
     }
     const t = app.renderer!.screenToTile(e.clientX, e.clientY);
     if (app.view.build) {
-      if (app.view.layer !== 1) {
-        app.view.layer = 1;
+      if (app.view.layer !== buildLayer(app.view.build)) {
+        app.view.layer = buildLayer(app.view.build);
         refresh();
         return;
       }

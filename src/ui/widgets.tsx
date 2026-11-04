@@ -29,7 +29,7 @@ export function Portrait({ look, sprite, size = 44, bg = '#1a2040' }: { look: Lo
     drawPerson(ctx, 0, 0, look, { walking: false, t: 0, facingScreen: 0.0001 });
     ctx.restore();
   }, [look, sprite, size, bg]);
-  return <canvas ref={ref} class="portrait" style={{ width: size, height: size }} />;
+  return <canvas ref={ref} class="portrait" style={{ width: `${size}px`, height: `${size}px` }} />;
 }
 
 export function BuildIcon({ type, size = 40 }: { type: BuildId; size?: number }) {
@@ -59,7 +59,7 @@ export function BuildIcon({ type, size = 40 }: { type: BuildId; size?: number })
     drawBuildable(ctx, type, 0, 0, 10, { powered: true, inUse: type === 'tv' || type === 'hot_plate' });
     ctx.restore();
   }, [type, size]);
-  return <canvas ref={ref} style={{ width: size, height: size }} />;
+  return <canvas ref={ref} style={{ width: `${size}px`, height: `${size}px` }} />;
 }
 
 export function Bar({ value, color, label, title }: { value: number; color: string; label?: string; title?: string }) {
@@ -73,11 +73,12 @@ export function Bar({ value, color, label, title }: { value: number; color: stri
   );
 }
 
-export function Dots({ n, color = '#2ad4c8' }: { n: number; color?: string }) {
+export function Dots({ n, color = '#2ad4c8', bonus = 0 }: { n: number; color?: string; bonus?: number }) {
+  const shown = Math.max(1, Math.min(5, n + bonus));
   return (
-    <span class="dots">
+    <span class="dots" title={bonus ? `${bonus > 0 ? '+1 from great mood' : '−1 from low mood'}` : undefined}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <i style={{ background: i <= n ? color : 'rgba(255,255,255,0.12)' }} />
+        <i class={bonus > 0 && i === shown && i > n ? 'up' : bonus < 0 && i === n && i > shown ? 'down' : ''} style={{ background: i <= shown ? color : 'rgba(255,255,255,0.12)' }} />
       ))}
     </span>
   );

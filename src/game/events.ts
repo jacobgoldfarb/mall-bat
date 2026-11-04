@@ -3,7 +3,7 @@ import { BAIL_HOURS, addCrew, bedCapacity, makeCandidate } from './crew';
 import { resolveHijinx, startHijinx } from './hijinx';
 import { scheduleNear } from './inspect';
 import { LAYOUT } from './layout';
-import { addMood } from './needs';
+import { FOOD_PRICE, addMood } from './needs';
 import { auctionBid, earn, log, pa, phone, pushModal, rand, sfx, unlock } from './ops';
 import type { Candidate, GameState } from './state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate } from './time';
@@ -15,13 +15,13 @@ export function offerCandidate(s: GameState, c: Candidate, intro: string) {
   const traits = c.traits.map((t) => `${TRAITS[t].name}: ${TRAITS[t].desc}`).join('\n');
   const full = s.crew.length >= bedCapacity(s) + 1;
   const short = Math.max(0, 3 - s.food);
-  const foodLabel = short ? `3 food: buy ${short} for $${short * 4}` : '3 food';
+  const foodLabel = short ? `3 food: buy ${short} for $${short * FOOD_PRICE}` : '3 food';
   pushModal(s, {
     title: `${c.name}, ${arch.title}`,
     art: 'recruit',
     body: `${intro}\n\n"${c.bio}"\n\nStealth ${'●'.repeat(c.stealth)}${'○'.repeat(5 - c.stealth)}   Charm ${'●'.repeat(c.charm)}${'○'.repeat(5 - c.charm)}   Handy ${'●'.repeat(c.handy)}${'○'.repeat(5 - c.handy)}${traits ? `\n\n${traits}` : ''}`,
     choices: [
-      { label: `Welcome to the ceiling (${foodLabel})`, action: 'recruit', disabled: full ? 'Build another bed first' : s.cash < short * 4 ? 'Needs 3 food' : undefined },
+      { label: `Welcome to the ceiling (${foodLabel})`, action: 'recruit', disabled: full ? 'Build another bed first' : s.cash < short * FOOD_PRICE ? 'Needs 3 food' : undefined },
       { label: 'Not right now', action: 'decline' },
     ],
   });
@@ -113,7 +113,7 @@ const SCRIPT: Scripted[] = [
     key: 'halloween',
     run: (s) => {
       s.flags.costumeDay = 30;
-      s.crew.forEach((c) => (c.familiarity = 0));
+      s.crew.forEach((c) => (c.heat = 0));
       s.food += 12;
       pa(s, 'Happy Halloween, Northgate Mall! Costumes welcome all day. Trick-or-treating at participating stores 4 to 7 PM!');
       log(s, 'Halloween: everyone is in costume. Nobody recognizes anybody today. Your crew grabbed 12 food in candy.', 'good');
@@ -280,7 +280,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     run: (s) => {
       s.flags.crackdownUntil = s.time + 3 * 1440;
       pa(s, 'Mall Management reminds guests: our Parental Escort Policy is now in effect. Loitering is prohibited.');
-      log(s, 'Loitering crackdown: recognition by the mall cop builds twice as fast for 3 days.', 'warn');
+      log(s, 'Loitering crackdown: day jobs build Heat twice as fast for 3 days.', 'warn');
     },
   },
   {
@@ -288,8 +288,8 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     weight: 1.2,
     when: (_s, h) => h === 20,
     run: (s) => {
-      s.pools.pallets = (s.pools.pallets ?? 0) + 10;
-      log(s, "Dillman's is dumping returns on the loading dock tonight. +10 parts available at Dock Pallets.", 'good');
+      s.pools.pallets = (s.pools.pallets ?? 0) + 50;
+      log(s, "Dillman's is dumping returns on the loading dock tonight. +50 parts available at Dock Pallets.", 'good');
     },
   },
   {
@@ -360,7 +360,7 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
     case 'recruit': {
       if (!s.candidate) return;
       const short = Math.max(0, 3 - s.food);
-      s.cash -= short * 4;
+      s.cash -= short * FOOD_PRICE;
       s.food = Math.max(0, s.food - 3);
       const c = addCrew(s, s.candidate);
       log(s, `${c.name} climbed the ladder and joined the crew.`, 'good', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 1 });
@@ -419,7 +419,7 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
     }
     case 'gary_insider':
       s.gary.insider = true;
-      log(s, 'Gary stays on the job. From now on he takes the long way around, whistles before corners, and the alert level rises more slowly.', 'good');
+      log(s, 'Gary stays on the job. From now on he takes the long way around, whistles before corners, and suspicion rises more slowly.', 'good');
       return;
   }
 }

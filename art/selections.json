@@ -94,7 +94,7 @@
   "build.throne": 3,
   "build.tv": 0,
   "build.fridge": 2,
-  "build.foam": 1,
+  "build.foam": 6,
   "build.lava_lamp": 2,
   "build.workbench": 2,
   "build.pc": 3,
@@ -151,5 +151,15 @@
   "icon.art.vent": 5,
   "icon.art.hotdog": 2,
   "icon.art.furby": 1,
-  "icon.art.glamour": 2
+  "icon.art.glamour": 2,
+  "build.bean_bag": 0,
+  "build.card_table": 0,
+  "build.dartboard": 1,
+  "build.disco_ball": 1,
+  "build.ball_pit": 1,
+  "icon.sets": 0,
+  "build.wet_floor": 0,
+  "build.out_of_order": 0,
+  "build.tamagotchi": 1,
+  "icon.mall": 0
 }

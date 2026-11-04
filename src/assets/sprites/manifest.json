@@ -583,9 +583,9 @@
   "build.foam": [
    {
     "file": "build.foam.png",
-    "w": 56,
-    "h": 32,
-    "base": 56
+    "w": 58,
+    "h": 36,
+    "base": 58
    }
   ],
   "build.fan": [
@@ -650,6 +650,70 @@
     "w": 28,
     "h": 49,
     "base": 28
+   }
+  ],
+  "build.bean_bag": [
+   {
+    "file": "build.bean_bag.png",
+    "w": 32,
+    "h": 28,
+    "base": 32
+   }
+  ],
+  "build.card_table": [
+   {
+    "file": "build.card_table.png",
+    "w": 34,
+    "h": 33,
+    "base": 34
+   }
+  ],
+  "build.dartboard": [
+   {
+    "file": "build.dartboard.png",
+    "w": 26,
+    "h": 40,
+    "base": 26
+   }
+  ],
+  "build.disco_ball": [
+   {
+    "file": "build.disco_ball.png",
+    "w": 24,
+    "h": 51,
+    "base": 24
+   }
+  ],
+  "build.ball_pit": [
+   {
+    "file": "build.ball_pit.png",
+    "w": 58,
+    "h": 40,
+    "base": 58
+   }
+  ],
+  "build.wet_floor": [
+   {
+    "file": "build.wet_floor.png",
+    "w": 26,
+    "h": 38,
+    "base": 26
+   }
+  ],
+  "build.out_of_order": [
+   {
+    "file": "build.out_of_order.png",
+    "w": 25,
+    "h": 37,
+    "base": 25
+   }
+  ],
+  "build.tamagotchi": [
+   {
+    "file": "build.tamagotchi.png",
+    "w": 12,
+    "h": 13,
+    "base": 12
    }
   ],
   "build.bunk": [

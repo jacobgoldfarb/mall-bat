@@ -1,13 +1,31 @@
 import { app, focusTile, refresh, selectBuild, selectObject, SPEEDS, toast } from '../app';
 import { audio } from '../audio/audio';
 import { currentJob, jobUnavailable, recallCrew, shiftNow } from '../game/crew';
-import { ALERT_LEVELS, BUILD, BUILDS, JOB, RANKS, TRAITS, canRotate, type BuildCategory } from '../game/defs';
+import {
+  SUSPICION_LEVELS,
+  BUILD,
+  BUILDS,
+  JOB,
+  KIOSK_LEVEL,
+  LEVELS,
+  MAX_LEVEL,
+  NOOKS,
+  NOOK_RADIUS,
+  nooksUsing,
+  POPUP_LEVEL,
+  TRAITS,
+  levelInfo,
+  unlocksAt,
+  canRotate,
+  type BuildCategory,
+  type BuildId,
+} from '../game/defs';
 import { resolveModal } from '../game/events';
 import { forecastInspection, forecastLabel, type InspectionForecast } from '../game/inspect';
 import { LAYOUT, C_DUCT, C_AC, C_SKYLIGHT, C_NONE, idx, inBounds } from '../game/layout';
-import { FOOD_PRICE, LOW_MOOD, daysOfFood, mealNeed, moodTarget } from '../game/needs';
+import { FOOD_PRICE, LOW_MOOD, MEALTIME_PRICE, daysOfFood, mealNeed, moodStatBonus, moodTarget } from '../game/needs';
 import { OBJECTIVES, objectiveProgress } from '../game/objectives';
-import { ACHIEVEMENTS, CLEAN_NIGHT_DECAY, alertDecay, alertLevel, auctionBid, rankOf } from '../game/ops';
+import { ACHIEVEMENTS, suspicionDecay, suspicionLevel, auctionBid, levelOf } from '../game/ops';
 import { KIOSK_COST, POPUP_COST, POWER_MULT, buyFood, clearJam, demolishAt, leaseKiosk, noiseField, openPopup, popupName, rotateObject } from '../game/sim';
 import type { Crew, GameState, Inspection, InspectionKind, Placed } from '../game/state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate, phaseAt, phaseLabel } from '../game/time';
@@ -25,9 +43,8 @@ export function TopBar({ s }: { s: GameState }) {
   const day = dayOf(s.time);
   const phase = phaseAt(s.time);
   const d = getDerived(s);
-  const rank = rankOf(s);
-  const next = RANKS[rank + 1];
-  const lvl = alertLevel(s.alert);
+  const level = levelOf(s);
+  const lvl = suspicionLevel(s.suspicion);
   const bid = auctionBid(s);
   const daysLeft = AUCTION_DAY - day;
   const gap = s.cash - bid;
@@ -57,7 +74,7 @@ export function TopBar({ s }: { s: GameState }) {
       </div>
       <div class="divider" />
       <div class="stats">
-        <div class="stat cash" title="Cash. You need more than the developer bid on Dec 31.">
+        <div class="stat cash" title="Beat the developer's bid on Dec 31.">
           <Icon name="cash" />
           <div>
             <b>{money(s.cash)}</b>
@@ -66,46 +83,33 @@ export function TopBar({ s }: { s: GameState }) {
           </div>
         </div>
         <FoodStat s={s} cap={d.foodCap} fridge={!!d.fridge} />
-        <Resource scope={s} icon="parts" label="Parts" value={s.parts} cap={d.partsCap} title="Building electronics and gear costs parts. Leftovers can be tinkered into goods (2 parts → 1 good)." />
-        <Resource scope={s} icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Sell on eBay, at the kiosk, the pop-up, or return them at Searz." />
+        <Resource scope={s} icon="parts" label="Parts" value={s.parts} cap={d.partsCap} title="Gear costs parts. Spares can be tinkered into goods." />
+        <Resource scope={s} icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Sell them somewhere." />
         <MoodStat s={s} />
       </div>
       <div class="divider" />
-      <div class="meter rank" title={rankTitle(s, rank)}>
-        <Icon name="rank" />
-        <div style={{ flex: 1 }}>
-          <div class="meter-head">
-            <b>{RANKS[rank].name}</b>
-          </div>
-          {next ? <Bar value={((s.totalEarned - RANKS[rank].earned) / (next.earned - RANKS[rank].earned)) * 100} color="#dc348c" /> : <span class="label">MAX RANK</span>}
-          {next && (
-            <span class="label">
-              {money(s.totalEarned)} / {money(next.earned)} EARNED
-            </span>
-          )}
-        </div>
-      </div>
-      <div class={`meter alert lvl${lvl}`} title={alertTitle(s, lvl)}>
+      <LevelMeter s={s} level={level} />
+      <div class={`meter alert lvl${lvl}`} title={suspicionTitle(lvl)}>
         <Icon name="alert" />
         <div style={{ flex: 1 }}>
           <div class="meter-head">
-            <span class="label">ALERT</span>
+            <span class="label">SUSPICION</span>
             <b>
-              {ALERT_LEVELS[lvl].name} {Math.round(s.alert)}%
+              {SUSPICION_LEVELS[lvl].name} {Math.round(s.suspicion)}%
             </b>
           </div>
           <div class="alert-track">
-            {ALERT_LEVELS.slice(1).map((l) => (
+            {SUSPICION_LEVELS.slice(1).map((l) => (
               <i style={{ left: `${l.at}%` }} />
             ))}
-            <div class="alert-fill" style={{ width: `${s.alert}%` }} />
+            <div class="alert-fill" style={{ width: `${s.suspicion}%` }} />
           </div>
           <span class="label">
-            COOLS −{Math.round(alertDecay(s, !s.spottedTonight))}/DAY{s.spottedTonight ? ' · SPOTTED TONIGHT' : ''}
+            COOLS −{Math.round(suspicionDecay(s, !s.spottedTonight))}/DAY{s.spottedTonight ? ' · SPOTTED TONIGHT' : ''}
           </span>
         </div>
       </div>
-      <div class="meter auction" title="The mall goes to auction at noon on New Year's Eve. Every store that closes lowers the developer's bid.">
+      <div class="meter auction" title="Auction at noon, New Year's Eve. Every store that closes lowers the bid.">
         <Icon name="auction" />
         <div>
           <span class="label">{s.flags.auctionKnown ? `AUCTION · ${daysLeft > 0 ? `${daysLeft} DAYS` : 'TODAY'}` : 'RUMOR · DEC 31'}</span>
@@ -122,33 +126,63 @@ export function TopBar({ s }: { s: GameState }) {
   );
 }
 
-function rankTitle(s: GameState, rank: number): string {
-  const next = RANKS[rank + 1];
-  const lines = ['Rank comes from lifetime earnings: every dollar the Bats bring in counts, even after you spend it.'];
-  if (next) lines.push(`${next.name} at ${money(next.earned)} earned (${money(next.earned - s.totalEarned)} to go). Each rank unlocks new builds and jobs.`);
-  else lines.push('Max rank.');
-  return lines.join('\n');
+function LevelMeter({ s, level }: { s: GameState; level: number }) {
+  const here = levelInfo(level);
+  const next = level < MAX_LEVEL ? levelInfo(level + 1) : null;
+  return (
+    <div
+      class="meter rank"
+      onClick={() => ((app.levelsOpen = !app.levelsOpen), refresh())}
+      title="Everything the Bats earn counts, even after you spend it."
+    >
+      <Icon name="rank" />
+      <div style={{ flex: 1 }}>
+        <div class="meter-head">
+          <span class="label">LV {level}</span>
+          <b>{here.title}</b>
+        </div>
+        {next ? <Bar value={((s.totalEarned - here.earned) / (next.earned - here.earned)) * 100} color="#dc348c" /> : <span class="label">MAX LEVEL</span>}
+        {next && (
+          <span class="label">
+            NEXT · {next.theme.toUpperCase()} · {money(next.earned - s.totalEarned)}
+          </span>
+        )}
+      </div>
+      {app.levelsOpen && <LevelList s={s} level={level} />}
+    </div>
+  );
 }
 
-function alertTitle(s: GameState, lvl: number): string {
-  const clean = alertDecay(s, true);
-  return [
-    `Alert: how suspicious mall management is of the whole mall. ${ALERT_LEVELS[lvl].name}: ${ALERT_LEVELS[lvl].desc}`,
-    `Cools every morning at 6 AM: −${Math.round(clean)} after a clean night (nobody spotted), −${Math.round(clean - CLEAN_NIGHT_DECAY)} if someone was seen.`,
-    'Rises when Bats are spotted or caught, stores notice missing stock, or an inspection finds your stuff.',
-    'At 100%, they sweep the ceiling and the Bats are evicted. Game over.',
-    'Separate from this, each Bat has their own recognition by Officer Dana (crew card), which only affects day jobs.',
-  ].join('\n');
+function LevelList({ s, level }: { s: GameState; level: number }) {
+  return (
+    <div class="level-list panel" onClick={(e) => e.stopPropagation()}>
+      {LEVELS.map((l, i) => {
+        const n = i + 1;
+        return (
+          <div class={`level-row ${n <= level ? 'done' : ''} ${n === level + 1 ? 'next' : ''}`}>
+            <b>
+              LV {n} · {l.title}
+            </b>
+            <span class="level-earned">{n <= level ? '✓' : money(l.earned - s.totalEarned)}</span>
+            <i>{l.theme}</i>
+            <small>{unlocksAt(n).join(' · ')}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function suspicionTitle(lvl: number): string {
+  return [`${SUSPICION_LEVELS[lvl].name}: ${SUSPICION_LEVELS[lvl].desc}`, 'Complaints, sightings and finds push it up. Quiet nights bring it down. At 100% they sweep the ceiling.'].join('\n');
 }
 
 function FoodStat({ s, cap, fridge }: { s: GameState; cap: number; fridge: boolean }) {
   const days = daysOfFood(s);
   const hungry = s.missedMeals > 0;
-  const title = [
-    `Food (cap ${cap}). The Bats eat together at 8 AM and 8 PM: ${mealNeed(s)} portions per meal.`,
-    `If the stash runs short, someone buys slices at $${FOOD_PRICE} each. With no cash either, the Bats go hungry: they tire faster, work slower, and mood drops.`,
-    fridge ? 'Fridge keeps it fresh.' : 'Spoils 8%/day without a powered Mini-Fridge.',
-  ].join('\n');
+  const title = [`The Bats eat at 8 AM and 8 PM, ${mealNeed(s)} portions a meal. Run out and someone buys slices, if there's cash.`, fridge ? '' : 'Spoils without a fridge.']
+    .filter(Boolean)
+    .join('\n');
   return (
     <div class={`stat ${hungry ? 'empty' : s.food >= cap ? 'full' : ''}`} title={title}>
       <Icon name="food" />
@@ -165,10 +199,9 @@ function MoodStat({ s }: { s: GameState }) {
   const target = moodTarget(s);
   const low = s.mood < LOW_MOOD;
   const title = [
-    `Mood ${Math.round(s.mood)}, drifting toward ${Math.round(target)}. Shared by the whole crew.`,
-    'Up: comfort items, beds for everyone, hot meals, leisure, reading at Boundaries, Jolly Bats.',
-    'Down: missed meals, Bats without beds, exhaustion, overcrowding, December cold without a heater.',
-    `Below ${LOW_MOOD}, everyone works 30% slower. If it stays miserable for days, someone leaves.`,
+    'Shared by the whole crew. Happy Bats work faster; miserable ones fumble and eventually leave.',
+    'Comfort, beds and hot meals help. Hunger, cold and overwork hurt.',
+    ...getDerived(s).nooks.map((n) => `${n.def.name}: ${n.def.bonus}`),
   ].join('\n');
   return (
     <div class={`stat ${low ? 'empty' : ''}`} title={title}>
@@ -198,7 +231,7 @@ function Resource({ icon, label, value, cap, title, vital, scope }: { icon: stri
   );
 }
 
-const CATS: { id: BuildCategory | 'business'; label: string; short: string }[] = [
+const CATS: { id: BuildCategory | 'business' | 'sets'; label: string; short: string }[] = [
   { id: 'structure', label: 'Structure', short: 'Base' },
   { id: 'living', label: 'Living', short: 'Live' },
   { id: 'power', label: 'Power', short: 'Power' },
@@ -206,10 +239,11 @@ const CATS: { id: BuildCategory | 'business'; label: string; short: string }[] =
   { id: 'leisure', label: 'Leisure', short: 'Fun' },
   { id: 'work', label: 'Work', short: 'Work' },
   { id: 'business', label: 'Business', short: 'Biz' },
+  { id: 'sets', label: 'Furniture sets', short: 'Sets' },
 ];
 
 export function BuildPanel({ s }: { s: GameState }) {
-  const rank = rankOf(s);
+  const level = levelOf(s);
   if (!app.buildOpen) {
     return (
       <div class="buildpanel panel collapsed">
@@ -249,10 +283,12 @@ export function BuildPanel({ s }: { s: GameState }) {
       </div>
       {app.buildCategory === 'business' ? (
         <BusinessPanel s={s} />
+      ) : app.buildCategory === 'sets' ? (
+        <SetsPanel s={s} />
       ) : (
         <div class="items">
           {items.map((b) => {
-            const locked = rank < b.rank;
+            const locked = level < b.level;
             const cant = s.cash < b.cost || s.parts < (b.parts ?? 0);
             const on = app.view.build === b.id;
             return (
@@ -279,7 +315,7 @@ export function BuildPanel({ s }: { s: GameState }) {
                       ) : null}
                     </b>
                   </div>
-                  <div class="item-desc">{locked ? `Locked · unlocks at rank ${RANKS[b.rank].name}` : b.desc}</div>
+                  <div class="item-desc">{locked ? `Locked · Level ${b.level}: ${levelInfo(b.level).theme}` : b.desc}</div>
                   {!locked && (
                     <div class="item-tags">
                       {b.power ? <i class="tag power">USES {b.power}W</i> : null}
@@ -288,6 +324,9 @@ export function BuildPanel({ s }: { s: GameState }) {
                       {b.smell ? <i class="tag smell">SMELL {b.smell}</i> : null}
                       {b.comfort ? <i class="tag comfort">COMFY {b.comfort}</i> : null}
                       {b.beds ? <i class="tag beds">BEDS {b.beds}</i> : null}
+                      {nooksUsing(b.id).map((n) => (
+                        <i class="tag set">SET: {n.name.toUpperCase()}</i>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -301,8 +340,31 @@ export function BuildPanel({ s }: { s: GameState }) {
   );
 }
 
+function SetsPanel({ s }: { s: GameState }) {
+  const d = getDerived(s);
+  const names = (types: BuildId[]) => types.map((t) => BUILD[t].name).join(' or ');
+  return (
+    <div class="items business">
+      <p class="muted small">Put these within {NOOK_RADIUS} tiles of each other.</p>
+      {NOOKS.map((n) => {
+        const count = d.nooks.filter((x) => x.def.id === n.id).length;
+        return (
+          <div class={`biz nook ${count ? 'formed' : ''}`}>
+            <h4>
+              {n.name}
+              {count ? <span class="ok-line"> ✓{count > 1 ? ` ×${count}` : ''}</span> : null}
+            </h4>
+            <p>{[n.anchor, ...n.slots].map(names).join(' + ')}</p>
+            <div class="nook-bonus">{n.bonus}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BusinessPanel({ s }: { s: GameState }) {
-  const rank = rankOf(s);
+  const level = levelOf(s);
   const vacant = s.rooms.map((r, i) => ({ r, i })).filter(({ r, i }) => r.vacant && !r.popup && LAYOUT.rooms[i].kind === 'store');
   const d = getDerived(s);
   return (
@@ -311,7 +373,9 @@ function BusinessPanel({ s }: { s: GameState }) {
         <h4>
           <Icon name="food" /> Buy Food
         </h4>
-        <p>Grab slices and pretzels at the food court like a normal customer. ${FOOD_PRICE} each.</p>
+        <p>
+          Grab slices and pretzels at the food court like a normal customer. ${FOOD_PRICE} each. Run out at mealtime and the crew pays ${MEALTIME_PRICE} a slice.
+        </p>
         <div class="row">
           {[5, 10, 25].map((n) => (
             <button
@@ -333,20 +397,20 @@ function BusinessPanel({ s }: { s: GameState }) {
         <h4>
           <Icon name="business" /> Phone Charmz Kiosk
         </h4>
-        <p>Lease a concourse kiosk under a fake LLC. Unlocks the Work the Kiosk day job: sells goods, and looking legit lowers recognition. ${KIOSK_COST} + $20/day rent.</p>
+        <p>Lease a concourse kiosk under a fake LLC. Unlocks the Work the Kiosk day job: sells goods, and looking legit cools Heat. ${KIOSK_COST} + $20/day rent.</p>
         {s.business.kiosk ? (
           <div class="ok-line">✓ Leased</div>
         ) : (
           <button
             class="btn"
-            disabled={rank < 2 || s.cash < KIOSK_COST}
+            disabled={level < KIOSK_LEVEL || s.cash < KIOSK_COST}
             onClick={() => {
               const err = leaseKiosk(s);
               if (err) toast(err, 'bad');
               refresh();
             }}
           >
-            {rank < 2 ? `Locked · ${RANKS[2].name}` : `Lease for $${KIOSK_COST}`}
+            {level < KIOSK_LEVEL ? `Locked · Level ${KIOSK_LEVEL}` : `Lease for $${KIOSK_COST}`}
           </button>
         )}
       </div>
@@ -359,9 +423,9 @@ function BusinessPanel({ s }: { s: GameState }) {
           <div class="ok-line">
             ✓ {popupName(s)} in the old {LAYOUT.rooms[s.business.popupRoom].name}
           </div>
-        ) : rank < 3 ? (
+        ) : level < POPUP_LEVEL ? (
           <button class="btn" disabled>
-            Locked · {RANKS[3].name}
+            Locked · Level {POPUP_LEVEL}
           </button>
         ) : vacant.length === 0 ? (
           <div class="muted">No vacant stores yet. Give it time. This mall is dying.</div>
@@ -438,9 +502,8 @@ function JobSummary({ s, c }: { s: GameState; c: Crew }) {
   );
 }
 
-function familiarityTitle(s: GameState, c: Crew): string {
-  const banned = c.bannedUntil > s.time ? `\nBanned from day jobs until ${formatDate(dayOf(c.bannedUntil))}.` : '';
-  return `Officer Dana (day security) recognition: ${Math.round(c.familiarity)}%. This is per Bat and separate from the mall-wide Alert.\nRises while doing sketchy day jobs in view of Dana (or loitering backstage). Fades 12 per day. The kiosk and pop-up lower it.\nAt 100%, this Bat is banned from day jobs for 3 days and Alert goes up 3. Night jobs are unaffected.${banned}`;
+function heatTitle(c: Crew): string {
+  return `How well security knows ${c.name}'s face. Sketchy day jobs and sightings raise it. It cools off over time, twice as fast on Rest by day. At 100%, Officer Dana makes an arrest.`;
 }
 
 function awayText(s: GameState, c: Crew): string {
@@ -477,9 +540,9 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
               value={c.energy}
               color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'}
               label="NRG"
-              title={`Energy ${Math.round(c.energy)}. Drains while awake, refills sleeping (faster in a bed). Set a shift to Rest to let them sleep.`}
+              title="Runs out on shift. Overworked Bats sour the crew's mood. Give them a Rest shift."
             />
-            <Bar value={c.familiarity} color="#ff2d55" label="COP" title={familiarityTitle(s, c)} />
+            <Bar value={c.heat} color="#ff2d55" label="HEAT" title={heatTitle(c)} />
           </div>
         </div>
         {c.detect > 0.05 && c.layer === 0 && <div class="detect" style={{ '--d': `${Math.min(1, c.detect) * 360}deg` } as Record<string, string>} />}
@@ -489,13 +552,13 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
         <div class="crew-detail" onClick={(e) => e.stopPropagation()}>
           <div class="statline">
             <span>
-              STEALTH <Dots n={c.stealth} color="#5ccfc2" />
+              STEALTH <Dots n={c.stealth} color="#5ccfc2" bonus={moodStatBonus(s, c, 'stealth')} />
             </span>
             <span>
-              CHARM <Dots n={c.charm} color="#ff6db3" />
+              CHARM <Dots n={c.charm} color="#ff6db3" bonus={moodStatBonus(s, c, 'charm')} />
             </span>
             <span>
-              HANDY <Dots n={c.handy} color="#ffc93e" />
+              HANDY <Dots n={c.handy} color="#ffc93e" bonus={moodStatBonus(s, c, 'handy')} />
             </span>
           </div>
           {c.traits.length > 0 && (
@@ -508,9 +571,8 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
             </div>
           )}
           <div class="bio">"{c.bio}"</div>
-          <Bar value={c.familiarity} color="#ff2d55" label="Officer Dana recognizes them" title={familiarityTitle(s, c)} />
-          <div class="muted small">Day jobs only. Fades 12/day. At 100%: banned from day jobs for 3 days, and Alert +3.</div>
-          {c.bannedUntil > s.time && <div class="warn">Banned from day jobs until {formatDate(dayOf(c.bannedUntil))}</div>}
+          <Bar value={c.heat} color="#ff2d55" label="Heat" title={heatTitle(c)} />
+          <div class="muted small">Security knows this face. Faster spotting at night; at 100% Dana arrests them by day.</div>
           <div class="row">
             <button class="btn small" onClick={() => ((app.view.layer = c.layer), app.renderer?.centerOn(c.x, c.y), refresh())}>
               Find<kbd>F</kbd>
@@ -520,7 +582,7 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
             </button>
             {c.layer === 0 && (
               <button class="btn small danger" onClick={() => (recallCrew(s, c), refresh())} title="Send them back up the ladder">
-                Recall
+                Rest
               </button>
             )}
             <span class="muted">
@@ -624,11 +686,11 @@ export function InspectionPanel({ s }: { s: GameState }) {
                   <span>{whenText(s, ins)}</span>
                 </div>
                 <div class="insp-sus" title="How closely they'll look.">
-                  <span class="label">SUSPICION</span>
+                  <span class="label">SCRUTINY</span>
                   <div class="sus-track">
-                    <div class="sus-fill" style={{ width: `${f.suspicion * 100}%` }} />
+                    <div class="sus-fill" style={{ width: `${f.scrutiny * 100}%` }} />
                   </div>
-                  <b>{Math.round(f.suspicion * 100)}%</b>
+                  <b>{Math.round(f.scrutiny * 100)}%</b>
                 </div>
                 <div class={isClean(f) ? 'good' : 'bad'}>{forecastLabel(f)}</div>
               </div>
@@ -772,7 +834,7 @@ export function Tooltip({ s }: { s: GameState }) {
   }
   const cap = r.powerCap * POWER_MULT[s.difficulty];
   return (
-    <div class="tooltip" style={{ left: (sc.x + 18) / app.uiScale, top: (sc.y + 18) / app.uiScale }}>
+    <div class="tooltip" style={{ left: `${(sc.x + 18) / app.uiScale}px`, top: `${(sc.y + 18) / app.uiScale}px` }}>
       <div class="tt-head">
         {app.view.layer === 1 ? 'Above ' : ''}
         <b>{rs.popup ? popupName(s) : r.name}</b>
@@ -873,7 +935,7 @@ export function SelectedObject({ s }: { s: GameState }) {
           {o.jammed && (
             <button
               class="btn small"
-              disabled={s.parts < 1}
+              disabled={s.parts < 5}
               onClick={() => {
                 const err = clearJam(s, o);
                 if (err) toast(err, 'bad');
@@ -881,7 +943,7 @@ export function SelectedObject({ s }: { s: GameState }) {
                 refresh();
               }}
             >
-              Clear jam (1 part)
+              Clear jam (5 parts)
             </button>
           )}
           {canRotate(o.type) && (
@@ -941,6 +1003,38 @@ export function ModalView({ s }: { s: GameState }) {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const SPARK_COLORS = ['var(--pink-3)', 'var(--teal-3)', 'var(--cream)', 'var(--gold)'];
+const SPARKS = Array.from({ length: 16 }, (_, i) => ({ angle: i * 22.5, color: SPARK_COLORS[i % 4], reach: i % 2 ? 230 : 300 }));
+
+export function LevelUpBanner() {
+  const shown = app.levelUp;
+  if (!shown || shown.until < performance.now()) return null;
+  const { title, theme } = levelInfo(shown.level);
+  const unlocks = unlocksAt(shown.level);
+  return (
+    <div class="levelup" key={shown.level}>
+      <div class="levelup-rays" />
+      {SPARKS.map((p) => (
+        <i class="levelup-spark" key={p.angle} style={{ '--angle': `${p.angle}deg`, '--reach': `${p.reach}px`, '--color': p.color }} />
+      ))}
+      <div class="levelup-card" onClick={() => ((app.levelUp = null), refresh())}>
+        <div class="levelup-kicker">LEVEL UP!</div>
+        <div class="levelup-level">{shown.level}</div>
+        <div class="levelup-title">{title}</div>
+        <div class="levelup-theme">{theme}</div>
+        {unlocks.length > 0 && (
+          <div class="levelup-unlocks">
+            <b>NEW</b>
+            {unlocks.map((u) => (
+              <span key={u}>{u}</span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

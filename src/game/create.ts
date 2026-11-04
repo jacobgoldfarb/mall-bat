@@ -1,12 +1,11 @@
 import { addCrew, makeCandidate } from './crew';
 import { LAYOUT, N } from './layout';
 import { log, pa, pushModal, rand, updateCameras } from './ops';
-import { BUILD, type JobId } from './defs';
-import type { Crew, Difficulty, GameState } from './state';
+import type { Difficulty, GameState } from './state';
 import { dayOf } from './time';
 import { markDirty } from './world';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export function newGame(playerName: string, difficulty: Difficulty, seed = Math.floor(Math.random() * 1e9)): GameState {
   rand.state = seed;
@@ -19,14 +18,15 @@ export function newGame(playerName: string, difficulty: Difficulty, seed = Math.
     playerName,
     cash: { easy: 150, normal: 110, hard: 80 }[difficulty],
     food: 6,
-    parts: 4,
+    parts: 20,
     goods: 0,
     mood: 60,
     missedMeals: 0,
     miserable: 0,
     excuseFatigue: 0,
     totalEarned: 0,
-    alert: 0,
+    level: 1,
+    suspicion: 0,
     mallHealth: 0.9,
     deck: new Array(N).fill(0),
     objects: [],
@@ -101,48 +101,12 @@ export function hasSave(): boolean {
   return !!localStorage.getItem(SAVE_KEY);
 }
 
-interface V1Crew {
-  dayJob: JobId;
-  nightJob: JobId;
-  morale: number;
-  miserable: number;
-}
-
-function migrateV1(s: GameState) {
-  const old = s.crew as unknown as (Crew & V1Crew)[];
-  s.mood = old.length ? old.reduce((a, c) => a + c.morale, 0) / old.length : 60;
-  s.missedMeals = 0;
-  s.miserable = Math.max(0, ...old.map((c) => c.miserable));
-  s.excuseFatigue = 0;
-  s.crew = old.map(({ morale, miserable, ...c }) => ({
-    ...c,
-    activeJob: 'rest',
-    jobCooldown: {},
-    state: c.state === ('toEat' as Crew['state']) ? 'idle' : c.state,
-  }));
-  s.version = 2;
-}
-
-interface V2Crew {
-  dayJobs: JobId[];
-  nightJobs: JobId[];
-}
-
-function migrateV2(s: GameState) {
-  const old = s.crew as unknown as (Crew & V2Crew)[];
-  s.crew = old.map(({ dayJobs, nightJobs, ...c }) => ({ ...c, dayJob: dayJobs?.[0] ?? c.dayJob ?? 'rest', nightJob: nightJobs?.[0] ?? c.nightJob ?? 'rest', fillIn: false }));
-  s.version = 3;
-}
-
 export function loadGame(): GameState | null {
   const raw = localStorage.getItem(SAVE_KEY);
   if (!raw) return null;
   const s = JSON.parse(raw) as GameState;
-  if (s.version === 1) migrateV1(s);
-  if (s.version === 2) migrateV2(s);
   if (s.version !== SAVE_VERSION) return null;
   for (const c of s.crew) if (c.awayUntil === null) c.awayUntil = Infinity;
-  s.objects = s.objects.filter((o) => o.type in BUILD);
   rand.state = s.rng;
   markDirty();
   return s;

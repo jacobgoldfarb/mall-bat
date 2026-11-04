@@ -1,24 +1,11 @@
-import { BUILD, type BuildId } from './defs';
-import {
-  C_OPEN,
-  E_GATE,
-  E_GLASS,
-  E_OPEN,
-  E_PUBLIC,
-  E_STAFF,
-  H,
-  LAYOUT,
-  N,
-  W,
-  edgeBetween,
-  idx,
-  inBounds,
-} from './layout';
+import { BUILD, NOOKS, NOOK_RADIUS, type BuildId, type NookDef, type NookId } from './defs';
+import { C_OPEN, E_GATE, E_GLASS, E_OPEN, E_PUBLIC, E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds } from './layout';
 import type { GameState, Placed } from './state';
 import { dayOf, mallHours, minuteOfDay, phaseAt } from './time';
 
 export interface Derived {
   objAt: Map<number, Placed>;
+  floorAt: Map<number, Placed>;
   drops: Set<number>;
   insulation: Float32Array;
   fanAt: Float32Array;
@@ -38,7 +25,14 @@ export interface Derived {
   supplyTotal: number;
   demandTotal: number;
   signs: Placed[];
+  nooks: Nook[];
+  nookOf: Map<number, NookId>;
   version: number;
+}
+
+export interface Nook {
+  def: NookDef;
+  members: Placed[];
 }
 
 let derived: Derived | null = null;
@@ -79,14 +73,15 @@ function computeDerived(s: GameState): Derived {
   const periscopeAt = new Uint8Array(N);
   const d: Derived = {
     objAt,
+    floorAt: new Map(),
     drops,
     insulation,
     fanAt,
     periscopeAt,
     beds: [],
     foodCap: 12,
-    partsCap: 10,
-    goodsCap: 6,
+    partsCap: 50,
+    goodsCap: 30,
     comfort: 0,
     hotPlates: [],
     workbenches: [],
@@ -98,10 +93,13 @@ function computeDerived(s: GameState): Derived {
     supplyTotal: 0,
     demandTotal: 0,
     signs: [],
+    nooks: [],
+    nookOf: new Map(),
     version: ++version,
   };
 
-  for (const o of s.objects) objAt.set(idx(o.x, o.y), o);
+  for (const o of s.objects) (BUILD[o.type].floor ? d.floorAt : objAt).set(idx(o.x, o.y), o);
+  markFloorAvoid(s);
 
   const sources = s.objects.filter((o) => BUILD[o.type].supply);
   const remaining = new Map<number, number>();
@@ -155,7 +153,7 @@ function computeDerived(s: GameState): Derived {
     if (def.comfort && o.powered && (!def.seasonalComfort || cold)) d.comfort += def.comfort;
     if (o.type === 'hot_plate' && o.powered) d.hotPlates.push(o);
     if (o.type === 'workbench' && o.powered) d.workbenches.push(o);
-    if ((o.type === 'tv' || o.type === 'arcade' || o.type === 'throne' || o.type === 'lava_lamp') && o.powered) d.leisure.push(o);
+    if (def.hangout && o.powered) d.leisure.push(o);
     if (o.type === 'pc' && o.powered) {
       d.pc = o;
       d.pcSignal = boundariesSignal(o.x, o.y);
@@ -164,21 +162,60 @@ function computeDerived(s: GameState): Derived {
     if (o.type === 'fridge' && o.powered) d.fridge = true;
     if (def.insulation) {
       const r = def.insulationRadius!;
-      for (let y = o.y - r; y <= o.y + r; y++)
-        for (let x = o.x - r; x <= o.x + r; x++)
-          if (inBounds(x, y)) insulation[idx(x, y)] = Math.min(insulation[idx(x, y)], 1 - def.insulation);
+      for (let y = o.y - r; y <= o.y + r; y++) for (let x = o.x - r; x <= o.x + r; x++) if (inBounds(x, y)) insulation[idx(x, y)] = Math.min(insulation[idx(x, y)], 1 - def.insulation);
     }
     if (def.fanRadius && o.powered) {
       const r = def.fanRadius;
       for (let y = o.y - r; y <= o.y + r; y++) for (let x = o.x - r; x <= o.x + r; x++) if (inBounds(x, y)) fanAt[idx(x, y)] += 1;
     }
     if (def.periscope) {
-      for (let y = o.y - 6; y <= o.y + 6; y++)
-        for (let x = o.x - 6; x <= o.x + 6; x++) if (inBounds(x, y) && Math.hypot(x - o.x, y - o.y) <= 6) periscopeAt[idx(x, y)] = 1;
+      for (let y = o.y - 6; y <= o.y + 6; y++) for (let x = o.x - 6; x <= o.x + 6; x++) if (inBounds(x, y) && Math.hypot(x - o.x, y - o.y) <= 6) periscopeAt[idx(x, y)] = 1;
     }
-    if (def.deterRadius) d.signs.push(o);
+    if (def.deterRadius && (!def.floor || o.delivered)) d.signs.push(o);
   }
+  findNooks(s, d);
+  for (const n of d.nooks) d.comfort += n.def.comfort;
   return d;
+}
+
+function markFloorAvoid(s: GameState) {
+  floorAvoid.fill(0);
+  for (const o of s.objects) {
+    if (o.type !== 'wet_floor' || !o.delivered) continue;
+    for (let y = o.y - 1; y <= o.y + 1; y++) for (let x = o.x - 1; x <= o.x + 1; x++) if (inBounds(x, y)) floorAvoid[idx(x, y)] += WET_FLOOR_AVOID;
+  }
+}
+
+export const cameraBagged = (s: GameState, cam: { x: number; y: number }) =>
+  s.objects.some((o) => o.type === 'out_of_order' && o.delivered && Math.hypot(o.x + 0.5 - cam.x, o.y + 0.5 - cam.y) <= OUT_OF_ORDER_REACH + 0.75);
+
+export const cameraLive = (s: GameState, cam: { x: number; y: number; active: boolean }) => cam.active && !cameraBagged(s, cam);
+
+export const OUT_OF_ORDER_REACH = 1;
+
+function canPlaceFloor(s: GameState, type: BuildId, x: number, y: number): string | null {
+  const i = idx(x, y);
+  if (!mallWalkable(i) || LAYOUT.rooms[LAYOUT.roomAt[i]].kind === 'outside') return 'Needs open mall floor';
+  if (getDerived(s).floorAt.has(i)) return 'Something is already set up here';
+  if (type === 'out_of_order' && !s.cameras.some((c) => c.active && Math.hypot(c.x - x - 0.5, c.y - y - 0.5) <= OUT_OF_ORDER_REACH + 0.75)) return 'Must be right next to a camera';
+  return null;
+}
+
+function findNooks(s: GameState, d: Derived) {
+  for (const def of NOOKS) {
+    for (const anchor of s.objects) {
+      if (!def.anchor.includes(anchor.type) || d.nookOf.has(anchor.id)) continue;
+      const members = [anchor];
+      for (const slot of def.slots) {
+        const pick = s.objects.find((o) => slot.includes(o.type) && !members.includes(o) && !d.nookOf.has(o.id) && Math.max(Math.abs(o.x - anchor.x), Math.abs(o.y - anchor.y)) <= NOOK_RADIUS);
+        if (!pick) break;
+        members.push(pick);
+      }
+      if (members.length < def.slots.length + 1) continue;
+      d.nooks.push({ def, members });
+      for (const m of members) d.nookOf.set(m.id, def.id);
+    }
+  }
 }
 
 function isColdNow(s: GameState) {
@@ -191,29 +228,30 @@ export const SKIMMABLE = ['store', 'food', 'foodcourt'];
 
 export function canPlace(s: GameState, type: BuildId, x: number, y: number): string | null {
   if (!inBounds(x, y)) return 'Out of bounds';
+  if (BUILD[type].floor) return canPlaceFloor(s, type, x, y);
   const i = idx(x, y);
   const def = BUILD[type];
   const ck = LAYOUT.ceilingKind[i];
   if (ck !== C_OPEN) {
     return ck === 1 ? 'HVAC duct in the way' : ck === 2 ? 'Skylight: everyone below would see you' : ck === 4 ? 'Rooftop AC unit' : 'No ceiling access here';
   }
+  const hatch = idx(LAYOUT.hatch.x, LAYOUT.hatch.y);
+  if (i === hatch) return 'Keep the hatch clear';
   if (type === 'deck') {
     if (s.deck[i]) return 'Already decked';
-    const hatch = idx(LAYOUT.hatch.x, LAYOUT.hatch.y);
     const adj = [
       [x + 1, y],
       [x - 1, y],
       [x, y + 1],
       [x, y - 1],
     ].some(([nx, ny]) => inBounds(nx, ny) && (s.deck[idx(nx, ny)] || idx(nx, ny) === hatch));
-    if (!adj && i !== hatch) return 'Must connect to your territory';
+    if (!adj) return 'Must connect to your territory';
     return null;
   }
   if (!s.deck[i]) return 'Needs a plywood deck';
   if (getDerived(s).objAt.has(i)) return 'Something is already here';
-  if (i === idx(LAYOUT.hatch.x, LAYOUT.hatch.y)) return 'Keep the hatch clear';
   if (def.unique && s.objects.some((o) => o.type === type)) return 'You can only have one';
-  if (type === 'pc' && boundariesSignal(x, y) <= 0) return 'No Wi-Fi signal: build within 10 tiles of Boundaries Books';
+  if (type === 'pc' && boundariesSignal(x, y) <= 0) return 'No Wi-Fi here. Get closer to Boundaries Books';
   if (type === 'splice') {
     const ri = LAYOUT.roomAt[i];
     if (!storeHasPower(s, ri)) return 'This store is vacant. The power is cut.';
@@ -288,6 +326,10 @@ export function makeCtx(s: GameState): PathCtx {
 }
 
 export const nodeOf = (layer: number, x: number, y: number) => layer * N + idx(x, y);
+
+export const crewDanger = new Float32Array(N);
+export const floorAvoid = new Float32Array(N);
+const WET_FLOOR_AVOID = 8;
 
 export function nodeWalkable(ctx: PathCtx, node: number, access: Access): boolean {
   if (node >= N) {
@@ -400,7 +442,7 @@ export function findPath(s: GameState, from: number, goals: number[] | ((n: numb
       const nn = layer * N + idx(nx, ny);
       if (!nodeWalkable(ctx, nn, access)) continue;
       if (layer === 0 && !edgePassable(ctx, x, y, nx, ny, access)) continue;
-      tryNode(nn, 1);
+      tryNode(nn, layer === 0 ? 1 + (access === ACCESS_CREW ? crewDanger[nn] : floorAvoid[nn]) : ceilingObstacle(ctx.d, nn - N) && !isGoal(nn) ? 1 + OBSTACLE_COST : 1);
     }
     if (access.ceiling) {
       if (i === hatchI || ctx.d.drops.has(i)) {
@@ -410,6 +452,67 @@ export function findPath(s: GameState, from: number, goals: number[] | ((n: numb
     }
   }
   return null;
+}
+
+export const blocksWalking = (o: Placed) => !BUILD[o.type].walkable && !BUILD[o.type].drop && !BUILD[o.type].floor;
+const OBSTACLE_COST = 12;
+
+const ceilingObstacle = (d: Derived, i: number) => {
+  const o = d.objAt.get(i);
+  return !!o && blocksWalking(o);
+};
+
+export function besideTiles(s: GameState, o: Placed): number[] {
+  const d = getDerived(s);
+  const out: number[] = [];
+  for (const [dx, dy] of DIRS) {
+    const x = o.x + dx;
+    const y = o.y + dy;
+    if (inBounds(x, y) && s.deck[idx(x, y)] && !ceilingObstacle(d, idx(x, y))) out.push(nodeOf(1, x, y));
+  }
+  return out;
+}
+
+const ceilingWalkable = (s: GameState, x: number, y: number) => s.deck[idx(x, y)] === 1 || (x === LAYOUT.hatch.x && y === LAYOUT.hatch.y);
+const EDGE_MARGIN = 0.3;
+const MARGIN_OFFSETS = [
+  [-EDGE_MARGIN, -EDGE_MARGIN],
+  [EDGE_MARGIN, -EDGE_MARGIN],
+  [-EDGE_MARGIN, EDGE_MARGIN],
+  [EDGE_MARGIN, EDGE_MARGIN],
+];
+
+function clearCeilingLine(s: GameState, a: number, b: number): boolean {
+  const ax = (a % W) + 0.5;
+  const ay = Math.floor(a / W) + 0.5;
+  const bx = (b % W) + 0.5;
+  const by = Math.floor(b / W) + 0.5;
+  const d = getDerived(s);
+  const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / 0.2);
+  for (let k = 1; k < steps; k++) {
+    const x = ax + ((bx - ax) * k) / steps;
+    const y = ay + ((by - ay) * k) / steps;
+    for (const [ox, oy] of MARGIN_OFFSETS) {
+      const tx = Math.floor(x + ox);
+      const ty = Math.floor(y + oy);
+      if (!ceilingWalkable(s, tx, ty)) return false;
+      const t = idx(tx, ty);
+      if (t !== a && t !== b && ceilingObstacle(d, t)) return false;
+    }
+  }
+  return true;
+}
+
+export function smoothCeilingPath(s: GameState, path: number[]): number[] {
+  const out = [path[0]];
+  let i = 0;
+  while (i < path.length - 1) {
+    let j = i + 1;
+    if (path[i] >= N && path[j] >= N) while (j + 1 < path.length && path[j + 1] >= N && clearCeilingLine(s, path[i] - N, path[j + 1] - N)) j++;
+    out.push(path[j]);
+    i = j;
+  }
+  return out;
 }
 
 const DIRS = [
@@ -449,9 +552,7 @@ export function sightFraction(ax: number, ay: number, bx: number, by: number): n
     const nx = corner || nextX < nextY ? x + stepX : x;
     const ny = corner || nextY < nextX ? y + stepY : y;
     if (!inBounds(nx, ny)) return t;
-    const open = corner
-      ? (sightEdge(x, y, nx, y) && sightEdge(nx, y, nx, ny)) || (sightEdge(x, y, x, ny) && sightEdge(x, ny, nx, ny))
-      : sightEdge(x, y, nx, ny);
+    const open = corner ? (sightEdge(x, y, nx, y) && sightEdge(nx, y, nx, ny)) || (sightEdge(x, y, x, ny) && sightEdge(x, ny, nx, ny)) : sightEdge(x, y, nx, ny);
     if (!open) return t;
     if (nx !== x) nextX += deltaX;
     if (ny !== y) nextY += deltaY;
@@ -504,10 +605,30 @@ export const CAMERA_RANGE = 7;
 
 export function cameraWatching(s: GameState, x: number, y: number): boolean {
   if ((s.flags.blackoutUntil ?? 0) > s.time) return false;
-  return s.cameras.some((c) => c.active && coneSees(c.x, c.y, cameraAngle(c, s.time), CAMERA_FOV + 0.15, CAMERA_RANGE + 0.5, x, y, 0) > 0);
+  return s.cameras.some((c) => cameraLive(s, c) && coneSees(c.x, c.y, cameraAngle(c, s.time), CAMERA_FOV + 0.15, CAMERA_RANGE + 0.5, x, y, 0) > 0);
 }
 
-const TALL = new Set(['fountain', 'palm', 'shelf', 'bookshelf', 'rack', 'cabinet', 'vending', 'boxes', 'panel', 'boiler', 'kiosk', 'dumpster', 'prize', 'ddr', 'cage', 'directory', 'car', 'oven', 'lostfound']);
+const TALL = new Set([
+  'fountain',
+  'palm',
+  'shelf',
+  'bookshelf',
+  'rack',
+  'cabinet',
+  'vending',
+  'boxes',
+  'panel',
+  'boiler',
+  'kiosk',
+  'dumpster',
+  'prize',
+  'ddr',
+  'cage',
+  'directory',
+  'car',
+  'oven',
+  'lostfound',
+]);
 
 export function roomTiles(ri: number): number[] {
   const r = LAYOUT.rooms[ri];

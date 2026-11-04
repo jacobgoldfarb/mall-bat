@@ -39,18 +39,18 @@ function Candidate({ spec, file, selected, onClick, tick }: { spec: AssetSpec; f
     body = (
       <div class="char">
         {DIRS.map((d) => (
-          <img src={`${base}/rotations/${d}.png`} style={{ height: 48 * SCALE }} />
+          <img src={`${base}/rotations/${d}.png`} style={{ height: `${48 * SCALE}px` }} />
         ))}
-        <img src={`${base}/walking-6-frames/south/${tick % 6}.png`} style={{ height: 48 * SCALE }} onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
+        <img src={`${base}/walking-6-frames/south/${tick % 6}.png`} style={{ height: `${48 * SCALE}px` }} onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
       </div>
     );
   } else if (spec.category === 'floor') {
     const px = spec.size * SCALE;
-    body = <div style={{ width: px * 3, height: px * 3, background: `url(${base}) 0 0 / ${px}px ${px}px`, imageRendering: 'pixelated' }} />;
+    body = <div style={{ width: `${px * 3}px`, height: `${px * 3}px`, background: `url(${base}) 0 0 / ${px}px ${px}px`, imageRendering: 'pixelated' }} />;
   } else if (spec.category === 'icon') {
-    body = <img src={base} style={{ height: spec.size * SCALE, background: '#1b1d3a', imageRendering: 'pixelated' }} />;
+    body = <img src={base} style={{ height: `${spec.size * SCALE}px`, background: '#1b1d3a', imageRendering: 'pixelated' }} />;
   } else {
-    body = <img src={base} style={{ height: spec.canvas[1] * SCALE, background: backdrop(spec) }} onLoad={(e) => setClipped(touchesEdge(e.currentTarget))} />;
+    body = <img src={base} style={{ height: `${spec.canvas[1] * SCALE}px`, background: backdrop(spec) }} onLoad={(e) => setClipped(touchesEdge(e.currentTarget))} />;
   }
   return (
     <figure class={selected ? 'selected' : ''} onClick={onClick}>

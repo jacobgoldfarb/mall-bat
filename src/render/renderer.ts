@@ -1,22 +1,5 @@
 import { BUILD, canRotate, type BuildId } from '../game/defs';
-import {
-  C_AC,
-  C_DUCT,
-  C_OPEN,
-  C_SKYLIGHT,
-  E_GATE,
-  E_GLASS,
-  E_OPEN,
-  E_PUBLIC,
-  E_STAFF,
-  H,
-  LAYOUT,
-  N,
-  W,
-  idx,
-  inBounds,
-  type RoomDef,
-} from '../game/layout';
+import { C_AC, C_DUCT, C_OPEN, C_SKYLIGHT, E_GATE, E_GLASS, E_OPEN, E_PUBLIC, E_STAFF, H, LAYOUT, N, W, idx, inBounds, type RoomDef } from '../game/layout';
 import { hash2 } from '../game/rng';
 import { guardCone } from '../game/npc';
 import { drawHeatMap } from './heat';
@@ -91,8 +74,8 @@ function bakeIso(width: number, height: number, originX: number, lookAt: (tx: nu
       if (!look) continue;
       const { size, data } = look.tex;
       const span = size / 32;
-      let u = (((tx % span) + span) % span + wx - tx) / span;
-      const v = (((ty % span) + span) % span + wy - ty) / span;
+      let u = ((((tx % span) + span) % span) + wx - tx) / span;
+      const v = ((((ty % span) + span) % span) + wy - ty) / span;
       if (look.flip) u = 1 - u;
       const si = (Math.min(size - 1, Math.floor(v * size)) * size + Math.min(size - 1, Math.floor(u * size))) * 4;
       const o = (py * width + px) * 4;
@@ -249,10 +232,7 @@ export class Renderer {
     const lookAt = (tx: number, ty: number) => (inBounds(tx, ty) ? (looks.get(idx(tx, ty)) ?? null) : null);
     const c = this.floorCanvas;
     const fctx = c.getContext('2d')!;
-    const regions =
-      previous.length === sig.length
-        ? LAYOUT.rooms.filter((_, ri) => previous[ri] !== sig[ri]).map(roomScreenRect)
-        : [{ left: 0, top: 0, width: MAP_W, height: MAP_H }];
+    const regions = previous.length === sig.length ? LAYOUT.rooms.filter((_, ri) => previous[ri] !== sig[ri]).map(roomScreenRect) : [{ left: 0, top: 0, width: MAP_W, height: MAP_H }];
     if (previous.length !== sig.length) {
       c.width = MAP_W;
       c.height = MAP_H;
@@ -405,7 +385,11 @@ export class Renderer {
         c.width = TW;
         c.height = TH;
         const dctx = c.getContext('2d')!;
-        dctx.putImageData(bakeIso(TW, TH, -TW / 2, (tx, ty) => (tx === 0 && ty === 0 ? { tex: deck, mul: null, flip } : null)), 0, 0);
+        dctx.putImageData(
+          bakeIso(TW, TH, -TW / 2, (tx, ty) => (tx === 0 && ty === 0 ? { tex: deck, mul: null, flip } : null)),
+          0,
+          0,
+        );
         dctx.strokeStyle = 'rgba(70,40,20,0.45)';
         dctx.beginPath();
         dctx.moveTo(0, TH / 2);
@@ -421,7 +405,11 @@ export class Renderer {
       const c = (this.ceilingCanvas = document.createElement('canvas'));
       c.width = MAP_W;
       c.height = MAP_H;
-      c.getContext('2d')!.putImageData(bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (open(tx, ty) ? { ...ceiling, flip: hash2(tx, ty, 4) > 0.5 } : null)), 0, 0);
+      c.getContext('2d')!.putImageData(
+        bakeIso(MAP_W, MAP_H, MAP_X, (tx, ty) => (open(tx, ty) ? { ...ceiling, flip: hash2(tx, ty, 4) > 0.5 } : null)),
+        0,
+        0,
+      );
       onContextRestored(c, () => this.buildCeilingTiles());
       return;
     }
@@ -453,7 +441,21 @@ export class Renderer {
     const items: Drawable[] = [];
     this.collectWalls(s, items, v.layer === 1);
     this.collectFixtures(s, items, t, night || v.layer === 1);
-    if (v.layer === 0) this.collectAgents(s, items, t, 0);
+    if (v.layer === 0) {
+      this.collectAgents(s, items, t, 0);
+      for (const o of s.objects)
+        if (BUILD[o.type].floor)
+          items.push({
+            depth: o.x + o.y + 1,
+            order: 2,
+            fn: () => {
+              ctx.save();
+              ctx.globalAlpha = o.delivered ? 1 : 0.45;
+              drawBuildable(ctx, o.type, o.x, o.y, t, { powered: true, inUse: false });
+              ctx.restore();
+            },
+          });
+    }
     items.sort((a, b) => a.depth - b.depth || a.order - b.order);
     for (const it of items) it.fn();
 
@@ -577,8 +579,7 @@ export class Renderer {
       items.push({
         depth: 11 + 13 + 1,
         order: 1,
-        fn: () =>
-          drawFixture(ctx, { id: -1, kind: 'kiosk', x: 11, y: 13, w: 1, d: 1, room: -1, blocks: false, color: '#2aa6a0', color2: '#fff', seed: 3, label: 'PHONE CHARMZ' }, t, dark, false),
+        fn: () => drawFixture(ctx, { id: -1, kind: 'kiosk', x: 11, y: 13, w: 1, d: 1, room: -1, blocks: false, color: '#2aa6a0', color2: '#fff', seed: 3, label: 'PHONE CHARMZ' }, t, dark, false),
       });
     }
     s.cameras.forEach((c, i) => {
@@ -970,12 +971,25 @@ export class Renderer {
 
     const hx = LAYOUT.hatch.x;
     const hy = LAYOUT.hatch.y;
-    ctx.fillStyle = '#ffe9a0';
+    ctx.fillStyle = '#80532f';
     ctx.beginPath();
-    diamondPath(ctx, hx, hy, 1, 1, 1, 0.15);
+    diamondPath(ctx, hx, hy, 1, 1, 1, 0.06);
     ctx.fill();
-    ctx.strokeStyle = '#c9a23a';
-    ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#1b1622';
+    ctx.beginPath();
+    diamondPath(ctx, hx, hy, 1, 1, 1, 0.16);
+    ctx.fill();
+    ctx.strokeStyle = '#a5afb8';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (const rx of [0.36, 0.64]) {
+      ctx.moveTo(isoX(hx + rx, hy + 0.2), isoY(hx + rx, hy + 0.2, 1));
+      ctx.lineTo(isoX(hx + rx, hy + 0.8), isoY(hx + rx, hy + 0.8, 1));
+    }
+    for (const ry of [0.3, 0.5, 0.7]) {
+      ctx.moveTo(isoX(hx + 0.36, hy + ry), isoY(hx + 0.36, hy + ry, 1));
+      ctx.lineTo(isoX(hx + 0.64, hy + ry), isoY(hx + 0.64, hy + ry, 1));
+    }
     ctx.stroke();
 
     const items: Drawable[] = [];
@@ -1030,6 +1044,7 @@ export class Renderer {
       }
     }
     for (const o of s.objects) {
+      if (BUILD[o.type].floor) continue;
       const inUse = o.usedUntil > s.time;
       items.push({ depth: o.x + o.y + 1, order: 2, fn: () => drawBuildable(ctx, o.type, o.x, o.y, t, { powered: o.powered, inUse, flip: o.flipped, alert: o.jammed, sleepers: sleepersIn(s, o) }) });
     }
@@ -1245,7 +1260,11 @@ export class Renderer {
       ctx.restore();
       const px = isoX(ins.x + 0.5, ins.y + 0.5);
       const py = isoY(ins.x + 0.5, ins.y + 0.5, 40);
-      const label = active ? (ins.state === 'climbing' ? 'INSPECTING NOW' : 'INSPECTOR EN ROUTE') : `${ins.kind === 'power' ? 'ELECTRICIAN' : ins.kind === 'fire' ? 'FIRE MARSHAL' : ins.kind === 'pest' ? 'PEST CONTROL' : 'INSPECTION'} ${dayOf(ins.at) === dayOf(s.time) ? 'TODAY' : 'TOMORROW'} ${Math.floor((ins.at % 1440) / 60)}:${String(Math.floor(ins.at % 60)).padStart(2, '0')}`;
+      const label = active
+        ? ins.state === 'climbing'
+          ? 'INSPECTING NOW'
+          : 'INSPECTOR EN ROUTE'
+        : `${ins.kind === 'power' ? 'ELECTRICIAN' : ins.kind === 'fire' ? 'FIRE MARSHAL' : ins.kind === 'pest' ? 'PEST CONTROL' : 'INSPECTION'} ${dayOf(ins.at) === dayOf(s.time) ? 'TODAY' : 'TOMORROW'} ${Math.floor((ins.at % 1440) / 60)}:${String(Math.floor(ins.at % 60)).padStart(2, '0')}`;
       ctx.font = `600 11px ${BODY_FONT}`;
       ctx.textAlign = 'center';
       const w = ctx.measureText(label).width + 12;
@@ -1268,7 +1287,7 @@ export class Renderer {
     if (!v.hover) return;
     const { x, y } = v.hover;
     if (!inBounds(x, y)) return;
-    if (v.layer === 1 && v.build) {
+    if (v.build && v.layer === (BUILD[v.build].floor ? 0 : 1)) {
       const tiles: [number, number][] = [];
       if (v.dragStart && (v.build === 'deck' || v.build === 'foam')) {
         const x0 = Math.min(v.dragStart.x, x);
@@ -1371,4 +1390,3 @@ function complaintColor(s: GameState, ri: number, alpha: number): string {
   const g = Math.round(220 - 170 * c);
   return `rgba(${r},${g},${Math.round(120 - 60 * c)},${alpha})`;
 }
-

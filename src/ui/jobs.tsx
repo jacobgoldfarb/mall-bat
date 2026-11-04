@@ -1,10 +1,11 @@
+import { moodStatBonus } from '../game/needs';
 import { useState } from 'preact/hooks';
 import { app, refresh } from '../app';
 import { audio } from '../audio/audio';
 import { currentJob, jobBlocked, shiftNow } from '../game/crew';
-import { JOB, JOBS, RANKS, type JobDef, type JobId } from '../game/defs';
+import { JOB, JOBS, type JobDef, type JobId } from '../game/defs';
 import { jobEstimate } from '../game/jobs';
-import { rankOf } from '../game/ops';
+import { levelOf } from '../game/ops';
 import type { Crew, GameState } from '../game/state';
 import { CLOSING_SPAN, dayOf, formatClock, mallHours } from '../game/time';
 import { crewSprite } from '../render/renderer';
@@ -17,6 +18,26 @@ const STAT_COLOR = { stealth: '#5ccfc2', charm: '#ff6db3', handy: '#ffc93e' };
 const STATS = ['stealth', 'charm', 'handy'] as const;
 
 let draggedCrew: number | null = null;
+
+let dragGhost: HTMLCanvasElement | null = null;
+
+// Chrome snapshots drag images without the #ui zoom, so the ghost has to live outside it.
+function startDrag(e: DragEvent, c: Crew) {
+  draggedCrew = c.id;
+  e.dataTransfer!.setData('text/plain', String(c.id));
+  const portrait = (e.currentTarget as HTMLElement).querySelector('canvas')!;
+  if (!dragGhost) {
+    dragGhost = document.createElement('canvas');
+    dragGhost.style.cssText = 'position:fixed;left:-1000px;top:0;pointer-events:none';
+    document.body.appendChild(dragGhost);
+  }
+  const size = portrait.clientWidth * app.uiScale;
+  dragGhost.width = portrait.width;
+  dragGhost.height = portrait.height;
+  dragGhost.style.width = dragGhost.style.height = `${size}px`;
+  dragGhost.getContext('2d')!.drawImage(portrait, 0, 0);
+  e.dataTransfer!.setDragImage(dragGhost, size / 2, size / 2);
+}
 
 const jobOf = (c: Crew, shift: Shift) => (shift === 'day' ? c.dayJob : c.nightJob);
 
@@ -56,10 +77,10 @@ export function JobsMenu({ s }: { s: GameState }) {
   const crew = s.crew.filter((c) => c.state !== 'away');
   const selected = crew.find((x) => x.id === app.jobsCrew) ?? null;
   const shift = app.jobsShift;
-  const rank = rankOf(s);
+  const level = levelOf(s);
   const jobs = shiftJobs(shift);
-  const open = jobs.filter((j) => rank >= j.rank);
-  const locked = jobs.filter((j) => rank < j.rank);
+  const open = jobs.filter((j) => level >= j.level);
+  const locked = jobs.filter((j) => level < j.level);
   const close = () => ((app.menu = 'none'), (draggedCrew = null), refresh());
   return (
     <div class="modal-wrap" onClick={close}>
@@ -79,7 +100,7 @@ export function JobsMenu({ s }: { s: GameState }) {
           </button>
         </div>
         <p class="jobs-explain">
-          <b>Drag a Bat onto a job</b>, or click a Bat and then a job. Each Bat works one job per shift. If their job runs dry or they get spotted, they either <b>rest</b> or <b>fill in</b> on a safe job (only ceiling work at night), your call. Click a Bat on a job to send them back to rest.
+          <b>Drag a Bat onto a job.</b> If it falls through, they rest or fill in somewhere safe. Your call.
         </p>
         <CrewTray s={s} crew={crew} selected={selected} shift={shift} />
         <div class="staff-grid">
@@ -91,7 +112,7 @@ export function JobsMenu({ s }: { s: GameState }) {
           <div class="locked-row">
             {locked.map((def) => (
               <span title={def.desc}>
-                {def.name} <i>· {RANKS[def.rank].name}</i>
+                {def.name} <i>· LV {def.level}</i>
               </span>
             ))}
           </div>
@@ -123,10 +144,7 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
             <div
               class={`bat-chip ${selected === c ? 'on' : ''} ${job === 'rest' ? 'idle' : ''}`}
               draggable
-              onDragStart={(e) => {
-                draggedCrew = c.id;
-                e.dataTransfer?.setData('text/plain', String(c.id));
-              }}
+              onDragStart={(e) => startDrag(e, c)}
               onDragEnd={() => ((draggedCrew = null), refresh())}
               onClick={() => ((app.jobsCrew = selected === c ? null : c.id), audio.play('click'), refresh())}
             >
@@ -141,15 +159,19 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
                   {STATS.map((st) => (
                     <span title={st}>
                       {st[0].toUpperCase()}
-                      <Dots n={c[st]} color={STAT_COLOR[st]} />
+                      <Dots n={c[st]} color={STAT_COLOR[st]} bonus={moodStatBonus(s, c, st)} />
                     </span>
                   ))}
                 </div>
-                <Bar value={c.energy} color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'} />
-              </div>
+                <Bar value={c.energy} color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'} title={`Energy ${Math.round(c.energy)}`} />
+                <Bar value={c.heat} color="#ff2d55" title={`Heat ${Math.round(c.heat)}`} />              </div>
               <button
                 class={`fill-toggle ${c.fillIn ? 'on' : ''}`}
-                title={c.fillIn ? 'If their job is unavailable, they take the best safe job. Click to make them rest instead.' : 'If their job is unavailable, they rest. Click to let them fill in on the best safe job.'}
+                title={
+                  c.fillIn
+                    ? 'If their job is unavailable, they take the best safe job. Click to make them rest instead.'
+                    : 'If their job is unavailable, they rest. Click to let them fill in on the best safe job.'
+                }
                 onClick={(e) => (e.stopPropagation(), setFillIn([c], !c.fillIn))}
               >
                 {c.fillIn ? 'Fills in' : 'Rests'}
@@ -198,7 +220,6 @@ function StaffCard({ s, def, crew, selected, shift }: { s: GameState; def: JobDe
         <span>
           USES {def.stat.toUpperCase()} {preview && <Dots n={preview[def.stat]} color={STAT_COLOR[def.stat]} />}
         </span>
-        <span>{e?.walk === null ? 'No route yet' : `${e?.walk} min walk`}</span>
       </div>
       {e?.limit && <div class="jc-limit">{e.limit}</div>}
       {blocked && <div class="jc-blocked">Right now: {blocked}</div>}
@@ -207,11 +228,7 @@ function StaffCard({ s, def, crew, selected, shift }: { s: GameState; def: JobDe
           <button
             class="slot-chip"
             draggable
-            onDragStart={(ev) => {
-              ev.stopPropagation();
-              draggedCrew = c.id;
-              ev.dataTransfer?.setData('text/plain', String(c.id));
-            }}
+            onDragStart={(ev) => (ev.stopPropagation(), startDrag(ev, c))}
             onDragEnd={() => ((draggedCrew = null), refresh())}
             onClick={(ev) => (ev.stopPropagation(), setJob(c, shift, 'rest'))}
             title={`Click to send ${c.name} back to rest.`}

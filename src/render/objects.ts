@@ -386,6 +386,8 @@ function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: numb
       return glow('#5aff8a', 8, 12);
     case 'xmas':
       return glow('#ff7a7a', 16, 14);
+    case 'disco_ball':
+      return glow('#d2e1ff', 22, 18);
     case 'heater':
       return glow('#ff6a1a', 8, 12);
     case 'arcade':
@@ -401,10 +403,17 @@ export function sleeperSprite(type: BuildId, sleepers: number): string | null {
 }
 
 export function drawFloorSleeper(ctx: Ctx, x: number, y: number) {
-  return !!drawPropSprite(ctx, "build.floor_sleeper", x - 0.5, y - 0.5);
+  return !!drawPropSprite(ctx, 'build.floor_sleeper', x - 0.5, y - 0.5);
 }
 
-export function drawBuildable(ctx: Ctx, type: BuildId, x: number, y: number, t: number, opts: { powered: boolean; inUse: boolean; alpha?: number; flip?: boolean; alert?: boolean; sleepers?: number }) {
+export function drawBuildable(
+  ctx: Ctx,
+  type: BuildId,
+  x: number,
+  y: number,
+  t: number,
+  opts: { powered: boolean; inUse: boolean; alpha?: number; flip?: boolean; alert?: boolean; sleepers?: number },
+) {
   if (opts.flip) {
     ctx.save();
     ctx.translate(cx(x, y) * 2, 0);

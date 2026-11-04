@@ -27,19 +27,7 @@ export interface Agent {
   bubble?: { text: string; until: number; tone?: 'alert' | 'info' | 'happy' };
 }
 
-export type CrewState =
-  | 'idle'
-  | 'toWork'
-  | 'working'
-  | 'toHome'
-  | 'sleeping'
-  | 'eating'
-  | 'leisure'
-  | 'toLeisure'
-  | 'toBed'
-  | 'fleeing'
-  | 'evacuating'
-  | 'away';
+export type CrewState = 'idle' | 'toWork' | 'working' | 'toHome' | 'sleeping' | 'eating' | 'leisure' | 'toLeisure' | 'toBed' | 'fleeing' | 'evacuating' | 'toErrand' | 'errand' | 'away';
 
 export interface Carry {
   cash: number;
@@ -58,7 +46,7 @@ export interface Crew extends Agent {
   handy: number;
   traits: TraitId[];
   energy: number;
-  familiarity: number;
+  heat: number;
   dayJob: JobId;
   nightJob: JobId;
   fillIn: boolean;
@@ -71,7 +59,6 @@ export interface Crew extends Agent {
   carrying: Carry;
   detect: number;
   bedId: number;
-  bannedUntil: number;
   awayUntil: number;
   joinedDay: number;
   earned: number;
@@ -81,6 +68,7 @@ export interface Crew extends Agent {
   recall: boolean;
   hiding: boolean;
   camWait: number;
+  replanAt: number;
 }
 
 export type NpcKind = 'shopper' | 'guard' | 'dayguard' | 'janitor' | 'inspector';
@@ -113,6 +101,9 @@ export interface Placed {
   supplyLoad: number;
   flipped?: boolean;
   jammed?: boolean;
+  delivered?: boolean;
+  expires?: number;
+  luredBy?: number;
 }
 
 export type InspectionKind = 'complaint' | 'power' | 'pest' | 'fire' | 'sweep';
@@ -222,7 +213,8 @@ export interface GameState {
   miserable: number;
   excuseFatigue: number;
   totalEarned: number;
-  alert: number;
+  level: number;
+  suspicion: number;
   mallHealth: number;
   deck: number[];
   objects: Placed[];

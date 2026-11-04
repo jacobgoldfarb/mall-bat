@@ -1,27 +1,11 @@
-import { ALERT_LEVELS, RANKS } from './defs';
+import { LEVELS, SUSPICION_LEVELS, levelInfo, unlocksAt } from './defs';
 import { Rng } from './rng';
 import type { GameState, LogKind, Modal } from './state';
 import { getDerived } from './world';
 
 export const rand = new Rng(1);
 
-export type Sfx =
-  | 'chime'
-  | 'coin'
-  | 'cash'
-  | 'build'
-  | 'demolish'
-  | 'alert'
-  | 'spotted'
-  | 'caught'
-  | 'escape'
-  | 'click'
-  | 'phone'
-  | 'squeak'
-  | 'bad'
-  | 'good'
-  | 'climb'
-  | 'huh';
+export type Sfx = 'chime' | 'coin' | 'cash' | 'build' | 'demolish' | 'alert' | 'spotted' | 'caught' | 'escape' | 'click' | 'phone' | 'squeak' | 'bad' | 'good' | 'levelup' | 'climb' | 'huh';
 
 export const sfxQueue: Sfx[] = [];
 export const sfx = (name: Sfx) => {
@@ -29,6 +13,7 @@ export const sfx = (name: Sfx) => {
 };
 
 export const achievementQueue: string[] = [];
+export const levelUpQueue: number[] = [];
 
 export interface Notice {
   text: string;
@@ -66,54 +51,57 @@ export function earn(s: GameState, amount: number) {
   s.cash += amount;
   s.totalEarned += amount;
   s.todayIncome += amount;
+  while (levelOf(s) > s.level) levelUp(s, s.level + 1);
 }
 
-export function rankOf(s: GameState): number {
-  let r = 0;
-  RANKS.forEach((rank, i) => {
-    if (s.totalEarned >= rank.earned) r = i;
-  });
-  return r;
+export const levelOf = (s: GameState) => LEVELS.filter((l) => s.totalEarned >= l.earned).length;
+
+function levelUp(s: GameState, level: number) {
+  s.level = level;
+  const { title } = levelInfo(level);
+  log(s, `Level ${level}: ${title}. New: ${unlocksAt(level).join(', ')}.`, 'good');
+  levelUpQueue.push(level);
+  sfx('levelup');
 }
 
-export function alertLevel(alert: number): number {
+export function suspicionLevel(alert: number): number {
   let lvl = 0;
-  ALERT_LEVELS.forEach((l, i) => {
+  SUSPICION_LEVELS.forEach((l, i) => {
     if (alert >= l.at) lvl = i;
   });
   return lvl;
 }
 
-const BASE_ALERT_DECAY = { easy: 4, normal: 2.6, hard: 1.6 };
+const BASE_SUSPICION_DECAY = { easy: 4, normal: 2.6, hard: 1.6 };
 export const CLEAN_NIGHT_DECAY = 1.5;
 
-export function alertDecay(s: GameState, cleanNight: boolean): number {
-  return BASE_ALERT_DECAY[s.difficulty] + (cleanNight ? CLEAN_NIGHT_DECAY : 0) + s.alert * 0.05;
+export function suspicionDecay(s: GameState, cleanNight: boolean): number {
+  return BASE_SUSPICION_DECAY[s.difficulty] + (cleanNight ? CLEAN_NIGHT_DECAY : 0) + s.suspicion * 0.05;
 }
 
-const DIFF_ALERT = { easy: 0.7, normal: 1, hard: 1.3 };
+const DIFF_SUSPICION = { easy: 0.7, normal: 1, hard: 1.3 };
 
-export function raiseAlert(s: GameState, amount: number, reason: string) {
-  const before = alertLevel(s.alert);
+export function raiseSuspicion(s: GameState, amount: number, reason: string) {
+  const before = suspicionLevel(s.suspicion);
   let a = amount;
   if (a > 0) {
-    a *= DIFF_ALERT[s.difficulty];
+    a *= DIFF_SUSPICION[s.difficulty];
     if (getDerived(s).scanner) a *= 0.85;
     if (s.gary.insider) a *= 0.85;
   }
-  s.alert = Math.max(0, Math.min(100, s.alert + a));
-  if (a >= 2) log(s, `Alert +${a.toFixed(0)}: ${reason}`, 'bad');
-  const after = alertLevel(s.alert);
+  s.suspicion = Math.max(0, Math.min(100, s.suspicion + a));
+  if (a >= 2) log(s, `Suspicion +${a.toFixed(0)}: ${reason}`, 'bad');
+  const after = suspicionLevel(s.suspicion);
   if (after > before) {
     sfx('alert');
-    const lvl = ALERT_LEVELS[after];
-    pa(s, `Security memo: alert level raised to ${lvl.name.toUpperCase()}. ${lvl.desc}`);
+    const lvl = SUSPICION_LEVELS[after];
+    pa(s, `Security memo: threat level raised to ${lvl.name.toUpperCase()}. ${lvl.desc}`);
     updateCameras(s);
   }
 }
 
 export function updateCameras(s: GameState) {
-  const lvl = alertLevel(s.alert);
+  const lvl = suspicionLevel(s.suspicion);
   const count = [2, 4, 5, 7, 8][lvl];
   s.cameras.forEach((c, i) => (c.active = i < count));
 }
