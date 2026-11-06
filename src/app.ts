@@ -21,7 +21,7 @@ export interface AppState {
   menu: 'none' | 'pause' | 'settings' | 'help' | 'newgame' | 'jobs';
   jobsCrew: number | null;
   jobsShift: 'day' | 'night';
-  buildCategory: BuildCategory | 'business' | 'sets';
+  buildCategory: BuildCategory | 'sets';
   buildOpen: boolean;
   selectedObj: number | null;
   hoverScreen: { x: number; y: number } | null;
@@ -100,7 +100,7 @@ let overlayBeforePowerFocus: Overlay | null = null;
 
 export function focusPowerFor(type: BuildId | null) {
   const def = type && BUILD[type];
-  const powered = !!def && (def.category === 'power' || !!def.power || !!def.supply);
+  const powered = !!def && (!!def.power || !!def.supply);
   if (powered && app.view.overlay !== 'power') {
     overlayBeforePowerFocus = app.view.overlay;
     app.view.overlay = 'power';

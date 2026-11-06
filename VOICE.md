@@ -27,6 +27,8 @@ Cut on sight:
 - Chains of clauses joined by colons and semicolons.
 - Exact formulas and percentages players can't act on (60% at 0, 120% at 100).
 - Every exception listed up front ("unless scrutiny is high. Fire marshals and sweeps ignore it.").
+- Narrating the design. If a line reads like a spec or a changelog ("Overworked Bats sour the crew's mood", "Everything earned counts, even after you spend it", "Route: … Risk: …"), it was written for the developer. Say what the player would say about it, or say nothing.
+- Explaining hidden systems. Some rules are meant to be felt, like what drives levels or how Heat ramps on a repeated job. Show the meter and let the player work it out.
 
 ## Discovery vs. confusion
 

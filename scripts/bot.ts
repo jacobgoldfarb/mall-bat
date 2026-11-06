@@ -71,7 +71,7 @@ const objPlan: { type: BuildId; x: number; y: number; minCash: number }[] = [
   { type: 'rope', x: 19, y: 12, minCash: 80 },
   { type: 'rope', x: 35, y: 8, minCash: 80 },
   { type: 'workbench', x: 36, y: 8, minCash: 250 },
-  { type: 'bean_bag', x: 32, y: 7, minCash: 80 },
+  { type: 'futon', x: 32, y: 7, minCash: 150 },
   { type: 'crate', x: 35, y: 7, minCash: 60 },
   { type: 'lamp', x: 36, y: 7, minCash: 60 },
   { type: 'splice', x: 12, y: 9, minCash: 200 },

@@ -1,8 +1,8 @@
 import { ARCHETYPES, BUILD, FIRST_NAMES, JOB, JOBS, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, type JobDef, type JobId } from './defs';
-import { LAYOUT, N, W, idx } from './layout';
+import { LAYOUT, N, W, idx, inBounds } from './layout';
 import { addSharedMood, stat, workMult } from './needs';
-import { earn, levelOf, log, rand, raiseSuspicion, sfx, unlock } from './ops';
-import type { Agent, Candidate, Crew, GameState, Look, Placed } from './state';
+import { earn, levelOf, log, pressure, rand, raiseSuspicion, sfx, unlock } from './ops';
+import type { Agent, Candidate, Carry, Crew, GameState, Look, Npc, Placed } from './state';
 import { dayOf, phaseAt, seasonFactor, hourCurve, minuteOfDay, md } from './time';
 import { ACCESS_CREW, besideTiles, blocksWalking, cameraWatching, crewDanger, findPath, getDerived, lineOfSight, markDirty, nodeOf, smoothCeilingPath } from './world';
 
@@ -209,11 +209,11 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
   const d = getDerived(s);
   switch (job) {
     case 'kiosk':
-      if (!s.business.kiosk) return 'Lease the kiosk first (Business tab)';
+      if (!s.business.kiosk) return 'Lease the kiosk first (Work tab)';
       if (s.goods < 1) return 'No goods to sell';
       break;
     case 'popup':
-      if (s.business.popupRoom < 0) return 'Open a pop-up first (Business tab)';
+      if (s.business.popupRoom < 0) return 'Open a pop-up first (Work tab)';
       if (s.goods < 1) return 'No goods to sell';
       break;
     case 'returns':
@@ -273,10 +273,19 @@ export function jobTarget(s: GameState, c: Crew, job: JobId): number[] | null {
   }
   if (job === 'popup') {
     const r = LAYOUT.rooms[s.business.popupRoom];
-    return [nodeOf(0, Math.floor((r.x0 + r.x1) / 2), Math.floor((r.y0 + r.y1) / 2))];
+    return spreadOut(s, c, job, Math.floor((r.x0 + r.x1) / 2), Math.floor((r.y0 + r.y1) / 2));
   }
   const spot = LAYOUT.spots[def.spot!];
-  return [nodeOf(0, spot.x, spot.y)];
+  return spreadOut(s, c, job, spot.x, spot.y);
+}
+
+function spreadOut(s: GameState, c: Crew, job: JobId, x: number, y: number): number[] {
+  const taken = new Set(s.crew.filter((o) => o !== c && o.activeJob === job && (o.state === 'working' || o.state === 'toWork')).map((o) => o.goal));
+  const spot = nodeOf(0, x, y);
+  if (!taken.has(spot)) return [spot];
+  const around: number[] = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inBounds(x + dx, y + dy) && !taken.has(nodeOf(0, x + dx, y + dy))) around.push(nodeOf(0, x + dx, y + dy));
+  return around.length ? around : [spot];
 }
 
 export function crowdNow(s: GameState): number {
@@ -284,8 +293,46 @@ export function crowdNow(s: GameState): number {
   return seasonFactor(dayOf(s.time)) * hourCurve(minuteOfDay(s.time)) * (0.5 + 0.6 * s.mallHealth);
 }
 
+const resumeThoughts = new WeakMap<Crew, string>();
+
 function setThought(c: Crew, t: string) {
+  resumeThoughts.delete(c);
   c.thought = t;
+}
+
+function waitThought(c: Crew, t: string) {
+  if (!resumeThoughts.has(c)) resumeThoughts.set(c, c.thought);
+  c.thought = t;
+}
+
+function resumeThought(c: Crew) {
+  const t = resumeThoughts.get(c);
+  if (t === undefined) return;
+  c.thought = t;
+  resumeThoughts.delete(c);
+}
+
+const HAUL_KINDS = ['cash', 'food', 'parts', 'goods'] as const;
+
+function haulBubble(s: GameState, c: Crew, before: Carry) {
+  if ((c.bubble?.until ?? 0) > s.time + 7) return;
+  const gained = HAUL_KINDS.map((k) => [k, c.carrying[k] - before[k]] as const).filter(([, n]) => n > 0);
+  if (gained.length) c.bubble = { text: gained.map(([k, n]) => (k === 'cash' ? `+$${n}` : `+${n} ${k}`)).join(' '), until: s.time + 8, tone: 'happy' };
+}
+
+function faceNearbyFixture(c: Crew) {
+  let best: { x: number; y: number } | null = null;
+  let bestD = 2.6;
+  for (const f of LAYOUT.fixtures) {
+    const fx = f.x + f.w / 2;
+    const fy = f.y + f.d / 2;
+    const d = Math.hypot(Math.max(0, Math.abs(fx - c.x) - f.w / 2), Math.max(0, Math.abs(fy - c.y) - f.d / 2));
+    if (d < bestD) {
+      bestD = d;
+      best = { x: fx, y: fy };
+    }
+  }
+  if (best) c.facing = Math.atan2(best.y - c.y, best.x - c.x);
 }
 
 function deposit(s: GameState, c: Crew) {
@@ -530,7 +577,7 @@ function decide(s: GameState, c: Crew) {
     else {
       const assigned = assignedJob(s, c);
       const why = assigned !== 'rest' && jobUnavailable(s, c, assigned);
-      startHome(s, c, why ? `Heading home (${why.toLowerCase()})` : 'Heading home');
+      startHome(s, c, why ? `Heading home. ${why}` : 'Heading home');
     }
     return;
   }
@@ -539,6 +586,9 @@ function decide(s: GameState, c: Crew) {
   const sleepy = c.energy < 40 || (phase === 'night' && c.energy < 92) || (phase !== 'open' && c.energy < 70);
   if (sleepy) return startSleep(s, c);
   startLeisure(s, c);
+  const assigned = assignedJob(s, c);
+  const why = assigned !== 'rest' && jobUnavailable(s, c, assigned);
+  if (why) setThought(c, `${JOB[assigned].name}: ${why.toLowerCase()}`);
 }
 
 const ERRAND_MIN_ENERGY = 15;
@@ -618,6 +668,7 @@ function startLeisure(s: GameState, c: Crew) {
   }
   c.state = 'leisure';
   c.timer = 30;
+  setThought(c, rand.pick(IDLE_THOUGHTS));
 }
 
 const STROLL_RADIUS = 5;
@@ -655,8 +706,37 @@ function faceNearestPal(s: GameState, c: Crew) {
 }
 
 const STROLL_PACE = 0.65;
+const DUCK_PACE = 1.35;
 const strideOf = (c: Crew) => 0.92 + ((c.id * 37) % 17) / 100;
-const paceOf = (c: Crew) => crewSpeed(c) * strideOf(c) * (c.state === 'toLeisure' ? STROLL_PACE : 1);
+const paceOf = (c: Crew) => crewSpeed(c) * strideOf(c) * (c.state === 'toLeisure' ? STROLL_PACE : c.state === 'ducking' ? DUCK_PACE : 1);
+
+const COVER_RADIUS = 6;
+const COVER_GAP = 5;
+const MAX_COVER_WAIT = 40;
+const DUCK_MEMORY = 45;
+const lastDuck = new WeakMap<Crew, number>();
+
+const watcherName = (n: Npc) => (n.kind === 'janitor' ? 'the janitor' : n.name);
+
+function duck(s: GameState, c: Crew, from: Npc): boolean {
+  if (s.time - (lastDuck.get(c) ?? -Infinity) < DUCK_MEMORY) return false;
+  const cover = (n: number) => {
+    if (n >= N || crewDanger[n] > 0) return false;
+    const x = (n % W) + 0.5;
+    const y = Math.floor(n / W) + 0.5;
+    return Math.hypot(x - c.x, y - c.y) <= COVER_RADIUS && Math.hypot(x - from.x, y - from.y) >= COVER_GAP && !lineOfSight(from.x, from.y, x, y);
+  };
+  if (!goTo(s, c, cover)) return false;
+  lastDuck.set(c, s.time);
+  c.state = 'ducking';
+  c.hiding = false;
+  setThought(c, `Ducking out of ${watcherName(from)}'s sight`);
+  c.bubble = { text: '!', until: s.time + 5, tone: 'alert' };
+  return true;
+}
+
+const watcherWithin = (s: GameState, c: Crew, r: number) =>
+  s.npcs.some((n) => (n.kind === 'guard' || n.kind === 'janitor') && n.state !== 'asleep' && n.state !== 'offduty' && Math.hypot(n.x - c.x, n.y - c.y) < r);
 
 export function updateCrew(s: GameState, c: Crew, dt: number) {
   if (c.state === 'away') {
@@ -705,9 +785,11 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
   }
 
   if (c.layer === 0 && c.climb <= 0) {
-    if (c.detect > 0.22) {
+    const ducking = c.state === 'ducking';
+    if (c.detect > 0.22 && !(ducking && c.detect <= 0.75)) {
       const source = s.npcs.find((n) => n.id === c.spottedBy);
       const close = !!source && Math.hypot(source.x - c.x, source.y - c.y) < 4.5;
+      if (close && c.detect <= 0.75 && c.state !== 'toHome' && duck(s, c, source)) return;
       if (close || c.detect > 0.75) {
         c.hiding = false;
         if (c.state !== 'toHome') {
@@ -725,35 +807,35 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       }
       if (!c.hiding) {
         c.hiding = true;
-        setThought(c, 'Hiding. Holding breath.');
+        waitThought(c, 'Hiding. Holding breath.');
         c.bubble = { text: '...', until: s.time + 6 };
       }
       c.moving = false;
       return;
     }
-    if (c.hiding) {
+    if (c.hiding && c.state !== 'idle') {
       if (c.detect > 0.04) {
         c.moving = false;
         return;
       }
       c.hiding = false;
-      setThought(c, 'Coast is clear');
+      resumeThought(c);
     }
   } else c.hiding = false;
 
-  const moving = ['toWork', 'toHome', 'toBed', 'toLeisure', 'toErrand', 'evacuating'].includes(c.state);
+  const moving = ['toWork', 'toHome', 'toBed', 'toLeisure', 'toErrand', 'evacuating', 'ducking'].includes(c.state);
   if (moving) {
     const next = c.path[c.pathI];
     if (c.layer === 1 && next !== undefined && next < N && c.climb <= 0) {
       const watcher = watcherNear(s, next % W, Math.floor(next / W));
       if (watcher) {
-        setThought(c, `Waiting for ${watcher} to pass`);
+        waitThought(c, `Waiting for ${watcher} to pass`);
         c.moving = false;
         if (c.state === 'toWork' && currentJob(s, c) !== c.activeJob) decide(s, c);
         return;
       }
     }
-    if (c.layer === 0 && next !== undefined && next < N && phaseAt(s.time) !== 'open' && c.climb <= 0) {
+    if (c.layer === 0 && next !== undefined && next < N && phaseAt(s.time) !== 'open' && c.climb <= 0 && c.state !== 'ducking') {
       const nx = (next % W) + 0.5;
       const ny = Math.floor(next / W) + 0.5;
       const here = crewDanger[idx(Math.floor(c.x), Math.floor(c.y))];
@@ -764,19 +846,22 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       if (crewDanger[next] >= GUARD_WAIT_DANGER && here < GUARD_WAIT_DANGER / 2 && c.camWait < MAX_WAIT) {
         c.camWait += dt;
         c.moving = false;
-        setThought(c, 'Waiting for the guard to look away');
+        waitThought(c, 'Waiting for the guard to look away');
         return;
       }
       if (cameraWatching(s, nx, ny) && !cameraWatching(s, c.x, c.y) && c.camWait < 25) {
         c.camWait += dt;
         c.moving = false;
-        setThought(c, 'Timing the camera sweep');
+        waitThought(c, 'Timing the camera sweep');
         return;
       }
     }
     if (c.camWait > 0 && c.moving !== false) c.camWait = Math.max(0, c.camWait - dt * 0.5);
     const arrived = moveAgent(c, paceOf(c), dt);
-    if (c.moving) c.camWait = Math.max(0, c.camWait - dt);
+    if (c.moving) {
+      c.camWait = Math.max(0, c.camWait - dt);
+      resumeThought(c);
+    }
     if (prevLayer === 0 && c.layer === 1) deposit(s, c);
     if (!arrived) {
       c.timer += dt;
@@ -801,10 +886,16 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
           const bench = freeBenches(s, c).find((b) => touching(c, b));
           c.useObj = bench?.id ?? -1;
           if (bench) faceObject(c, bench);
-        }
+        } else if (c.layer === 0) faceNearbyFixture(c);
         setThought(c, JOB[job].name);
         return;
       }
+      case 'ducking':
+        c.state = 'idle';
+        c.hiding = true;
+        c.timer = rand.range(5, 10);
+        setThought(c, 'Hiding until the coast is clear');
+        return;
       case 'toHome':
       case 'evacuating':
         c.state = 'idle';
@@ -836,6 +927,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     return;
   }
 
+  c.moving = false;
   switch (c.state) {
     case 'working': {
       const job = currentJob(s, c);
@@ -850,7 +942,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         if (bench) bench.usedUntil = s.time + 2;
       }
       if (c.workTimer <= 0) {
+        const before = { ...c.carrying };
         const more = doCycle(s, c, job);
+        haulBubble(s, c, before);
         if (!more || planJob(s, c) !== job) {
           c.useObj = -1;
           return decide(s, c);
@@ -897,7 +991,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
     case 'idle':
     default: {
       c.timer -= dt;
-      if (c.timer <= 0) decide(s, c);
+      if (c.timer > 0 || (c.hiding && c.timer > -MAX_COVER_WAIT && watcherWithin(s, c, COVER_GAP + 2))) return;
+      c.hiding = false;
+      decide(s, c);
     }
   }
 }
@@ -912,15 +1008,17 @@ function watcherNear(s: GameState, x: number, y: number): string | null {
   return null;
 }
 
-export function recallCrew(s: GameState, c: Crew) {
+export function restCrew(s: GameState, c: Crew) {
+  const shift = shiftNow(s);
+  if (shift === 'day') c.dayJob = 'rest';
+  if (shift === 'night') c.nightJob = 'rest';
   if (c.state === 'away' || c.state === 'fleeing') return;
-  c.waitUntil = s.time + 120;
   c.useObj = -1;
   if (c.layer === 0) startHome(s, c, 'Calling it. Heading home');
   else {
     c.state = 'idle';
     c.timer = 0;
-    setThought(c, 'Laying low');
+    setThought(c, 'Calling it');
   }
 }
 
@@ -992,7 +1090,8 @@ export function heatTick(s: GameState, c: Crew, rate: number, dt: number) {
   const crackdown = (s.flags.crackdownUntil ?? 0) > s.time ? 2 : 1;
   const halloween = s.flags.costumeDay === dayOf(s.time) ? 0 : 1;
   const before = c.heat;
-  addHeat(c, rate * mult * crackdown * halloween * dt);
+  const noticed = rate > 0 ? 0.35 + 0.65 * pressure(s, 3, 6) : 1;
+  addHeat(c, rate * mult * crackdown * halloween * noticed * dt);
   if (before < HEAT_WARNING && c.heat >= HEAT_WARNING)
     log(s, `Officer Dana is watching ${c.name} closely. Rest them by day to cool off before she makes a call.`, 'bad', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 });
   if (c.heat >= 100 && c.state !== 'away') crewArrestedByDay(s, c);

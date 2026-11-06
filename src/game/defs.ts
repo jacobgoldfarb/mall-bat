@@ -28,6 +28,7 @@ export type BuildId =
   | 'hammock'
   | 'arcade'
   | 'throne'
+  | 'hot_tub'
   | 'asbestos'
   | 'siphon'
   | 'bean_bag'
@@ -39,7 +40,7 @@ export type BuildId =
   | 'out_of_order'
   | 'tamagotchi';
 
-export type BuildCategory = 'structure' | 'living' | 'power' | 'stealth' | 'leisure' | 'work';
+export type BuildCategory = 'structure' | 'living' | 'food' | 'stealth' | 'work';
 
 export interface BuildDef {
   id: BuildId;
@@ -78,6 +79,7 @@ export interface BuildDef {
   seat?: boolean;
   lastsDays?: number;
   deterRadius?: number;
+  deterUses?: number;
   hangout?: string;
   racket?: boolean;
 }
@@ -86,44 +88,45 @@ const BUILDS_AS_WRITTEN: BuildDef[] = [
   { id: 'deck', name: 'Plywood Deck', category: 'structure', cost: 6, level: 1, desc: 'Everything sits on plywood. Drag out from the hatch.', flavor: 'Ceiling tiles hold four pounds. Plywood holds you.' },
   { id: 'sleeping_bag', name: 'Sleeping Bag', category: 'living', cost: 15, level: 1, portable: true, beds: 1, comfort: 1, desc: '1 bed. Better than the floor.', flavor: 'Smells like a sleepover from 1997.' },
   { id: 'crate', name: 'Milk Crate Stash', category: 'living', cost: 12, level: 1, portable: true, partsCap: 75, goodsCap: 40, desc: '+75 parts, +40 goods storage.', flavor: 'Property of Northgate Dairy. Allegedly.' },
-  { id: 'cooler', name: 'Igloo Cooler', category: 'living', cost: 18, level: 1, portable: true, foodCap: 20, desc: '+20 food storage. Food still spoils.', flavor: 'Refilled nightly with food court ice.' },
-  { id: 'splice', name: 'Power Splice', category: 'power', cost: 25, parts: 5, level: 1, walkable: true, supply: 120, radius: 5, desc: 'Steals 120W from the store below. They pay the bill, and they read it.', flavor: 'A wire nut and a prayer.' },
-  { id: 'lamp', name: 'Clip Lamp', category: 'leisure', cost: 10, level: 1, portable: true, power: 5, comfort: 1, light: 3.2, lightColor: '255,214,150', desc: '+1 comfort.', flavor: 'Clamped to a sprinkler pipe. Probably fine.' },
-  { id: 'hot_plate', name: 'Hot Plate', category: 'living', cost: 35, parts: 5, level: 1, portable: true, power: 40, smell: 5, noiseWhen: 'use', desc: "Hot meals lift mood. Cooking smells, so mind what's below.", flavor: 'Ramen tonight. Ramen every night.' },
+  { id: 'cooler', name: 'Igloo Cooler', category: 'food', cost: 18, level: 2, portable: true, foodCap: 20, desc: '+20 food storage. Food still spoils.', flavor: 'Refilled nightly with food court ice.' },
+  { id: 'splice', name: 'Power Splice', category: 'structure', cost: 25, parts: 5, level: 1, walkable: true, supply: 120, radius: 5, desc: 'Steals 120W from the store below. They pay the bill, and they read it.', flavor: 'A wire nut and a prayer.' },
+  { id: 'lamp', name: 'Clip Lamp', category: 'living', cost: 10, level: 1, portable: true, power: 5, comfort: 1, light: 3.2, lightColor: '255,214,150', desc: '+1 comfort.', flavor: 'Clamped to a sprinkler pipe. Probably fine.' },
+  { id: 'hot_plate', name: 'Hot Plate', category: 'food', cost: 35, parts: 5, level: 3, portable: true, power: 40, smell: 5, noiseWhen: 'use', desc: "Hot meals lift mood. Cooking smells, so mind what's below.", flavor: 'Ramen tonight. Ramen every night.' },
 
   { id: 'futon', name: 'Futon', category: 'living', cost: 70, level: 3, beds: 1, comfort: 3, desc: '1 bed, +3 comfort.', flavor: 'Liberated from a dorm room clearance.' },
-  { id: 'fridge', name: 'Mini-Fridge', category: 'living', cost: 85, parts: 15, level: 3, power: 20, foodCap: 60, desc: '+60 food storage. Nothing spoils.', flavor: 'Still has a Dave Matthews Band sticker.' },
+  { id: 'fridge', name: 'Mini-Fridge', category: 'food', cost: 85, parts: 15, level: 3, power: 20, foodCap: 60, desc: '+60 food storage. Nothing spoils.', flavor: 'Still has a Dave Matthews Band sticker.' },
   { id: 'foam', name: 'Egg-Crate Foam', category: 'stealth', cost: 16, level: 3, portable: true, walkable: true, insulation: 0.5, insulationRadius: 1, desc: 'Muffles noise on this tile and around it.', flavor: 'The secret to every garage band and every squatter.' },
   { id: 'fan', name: 'Box Fan', category: 'stealth', cost: 22, parts: 10, level: 3, portable: true, power: 8, noise: 0.4, noiseWhen: 'always', fanRadius: 2, desc: 'Clears smell nearby. Hums a little.', flavor: 'Blows the evidence toward the Cinnabomb.' },
-  { id: 'tv', name: 'CRT TV + PS2', category: 'leisure', cost: 120, parts: 15, level: 3, power: 35, comfort: 6, noise: 2.6, noiseWhen: 'use', light: 2.4, lightColor: '120,170,255', hangout: 'Playing Vice City', desc: '+6 comfort. Loud, so park it over a loud store.', flavor: 'Vice City, volume down. Mostly.' },
+  { id: 'tv', name: 'CRT TV + PS2', category: 'living', cost: 120, parts: 15, level: 3, power: 35, comfort: 6, noise: 2.6, noiseWhen: 'use', light: 2.4, lightColor: '120,170,255', hangout: 'Playing Vice City', desc: '+6 comfort. Loud, so park it over a loud store.', flavor: 'Vice City, volume down. Mostly.' },
   { id: 'rope', name: 'Rope Drop', category: 'structure', cost: 30, level: 2, drop: true, desc: 'A shortcut down into the store below. The loose tile gets noticed.', flavor: 'Mind the gap.' },
-  { id: 'lava_lamp', name: 'Lava Lamp', category: 'leisure', cost: 30, parts: 5, level: 3, portable: true, power: 4, comfort: 2, light: 2.2, lightColor: '255,90,200', hangout: 'Staring at the lava lamp', desc: '+2 comfort.', flavor: "Spenceley's floor model. It wasn't going to buy itself." },
+  { id: 'lava_lamp', name: 'Lava Lamp', category: 'living', cost: 30, parts: 5, level: 3, portable: true, power: 4, comfort: 2, light: 2.2, lightColor: '255,90,200', hangout: 'Staring at the lava lamp', desc: '+2 comfort.', flavor: "Spenceley's floor model. It wasn't going to buy itself." },
 
-  { id: 'workbench', name: 'Workbench', category: 'work', cost: 150, parts: 20, level: 4, power: 30, noise: 3.4, noiseWhen: 'use', light: 2, lightColor: '255,240,200', desc: 'Unlocks Tinkering: parts in, goods out. One Bat per bench. Loud.', flavor: 'Refurbished means it worked once.' },
-  { id: 'siphon', name: 'Coin Siphon', category: 'work', cost: 180, parts: 25, level: 7, power: 10, racket: true, desc: 'Skims the registers below while the mall is open. Tills come up short. Jams sometimes.', flavor: 'Every till in Northgate comes up a little short. Nobody can prove why.' },
+  { id: 'workbench', name: 'Workbench', category: 'work', cost: 150, parts: 20, level: 4, power: 30, noise: 3.4, noiseWhen: 'use', light: 2, lightColor: '255,240,200', desc: 'Turns parts into goods. One Bat at a time, and loud.', flavor: 'Refurbished means it worked once.' },
+  { id: 'siphon', name: 'Coin Siphon', category: 'work', cost: 180, parts: 25, level: 7, power: 10, racket: true, desc: 'Skims the registers below while the mall is open. Jams sometimes.', flavor: 'Every till in Northgate comes up a little short. Nobody can prove why.' },
   { id: 'pc', name: 'Beige Box PC', category: 'work', cost: 260, parts: 30, level: 7, power: 50, unique: true, light: 1.6, lightColor: '140,255,190', desc: 'Sells goods on eBay while you sleep. Needs Boundaries Books Wi-Fi.', flavor: 'Leeching the T-Mobile HotSpot. 56k would be faster.' },
   { id: 'raccoon', name: 'Decoy Raccoon', category: 'stealth', cost: 25, level: 5, decoy: true, desc: 'Inspectors blame the raccoon and leave. Single use.', flavor: '"It was raccoons." The oldest excuse in the book.' },
-  { id: 'asbestos', name: 'Asbestos Warning Sign', category: 'stealth', cost: 40, level: 7, floor: true, deterRadius: 3, desc: 'Most inspectors take one look and turn around.', flavor: "DANGER. ASBESTOS. AUTHORIZED PERSONNEL ONLY. Laminated at Kinko's." },
-  { id: 'wet_floor', name: 'Wet Floor Sign', category: 'stealth', cost: 15, level: 6, floor: true, lastsDays: 3, desc: 'Guards and the janitor walk around it.', flavor: 'CUIDADO. PISO MOJADO. Nobody questions the yellow sign.' },
+  { id: 'asbestos', name: 'Asbestos Warning Sign', category: 'stealth', cost: 40, level: 5, floor: true, deterRadius: 3, deterUses: 2, desc: 'Inspectors take one look and turn around. Good for two.', flavor: "DANGER. ASBESTOS. AUTHORIZED PERSONNEL ONLY. Laminated at Kinko's." },
+  { id: 'wet_floor', name: 'Wet Floor Sign', category: 'stealth', cost: 15, level: 5, floor: true, lastsDays: 3, desc: 'Guards and the janitor walk around it.', flavor: 'CUIDADO. PISO MOJADO. Nobody questions the yellow sign.' },
   { id: 'out_of_order', name: 'Out of Order Bag', category: 'stealth', cost: 20, level: 7, floor: true, desc: 'Blinds a camera. Eventually someone looks up.', flavor: 'OUT OF ORDER. SORRY FOR THE INCONVENIENCE. — Management' },
   { id: 'tamagotchi', name: 'Beeping Tamagotchi', category: 'stealth', cost: 30, level: 6, floor: true, desc: 'Beeps at night until a guard comes looking.', flavor: 'It needs feeding. It always needs feeding.' },
   { id: 'periscope', name: 'Periscope', category: 'stealth', cost: 90, parts: 15, level: 5, portable: true, periscope: true, desc: 'Bats below are harder to spot at night.', flavor: 'Two mirrors and a paper towel tube.' },
   { id: 'bunk', name: 'Bunk Bed', category: 'living', cost: 140, parts: 10, level: 6, beds: 2, comfort: 2, desc: '2 beds, +2 comfort.', flavor: 'Top bunk is a privilege.' },
-  { id: 'xmas', name: 'String Lights', category: 'leisure', cost: 25, parts: 5, level: 6, portable: true, power: 6, comfort: 2, light: 2.8, lightColor: '255,120,120', desc: '+2 comfort.', flavor: 'Ceiling-core.' },
+  { id: 'xmas', name: 'String Lights', category: 'living', cost: 25, parts: 5, level: 6, portable: true, power: 6, comfort: 2, light: 2.8, lightColor: '255,120,120', desc: '+2 comfort.', flavor: 'Ceiling-core.' },
 
   { id: 'heater', name: 'Space Heater', category: 'living', cost: 50, parts: 10, level: 8, portable: true, power: 45, comfort: 5, seasonalComfort: true, light: 1.6, lightColor: '255,110,40', desc: '+5 comfort once it gets cold.', flavor: 'The ducts get cold in winter.' },
   { id: 'scanner', name: 'Police Scanner', category: 'stealth', cost: 220, parts: 25, level: 8, portable: true, power: 10, unique: true, desc: 'Hear inspectors coming. They look less closely.', flavor: '"Unit 4, check the ceiling in Hot Spot." Copy that, Unit 4.' },
-  { id: 'battery', name: 'Car Battery Bank', category: 'power', cost: 320, parts: 40, level: 8, supply: 200, radius: 6, offGrid: true, desc: 'Powers 200W. No store gets the bill.', flavor: 'Six Die-Hards and an inverter from RadioHut.' },
+  { id: 'battery', name: 'Car Battery Bank', category: 'structure', cost: 320, parts: 40, level: 8, supply: 200, radius: 6, offGrid: true, desc: 'Powers 200W. No store gets the bill.', flavor: 'Six Die-Hards and an inverter from RadioHut.' },
   { id: 'pod', name: 'Soundproof Pod', category: 'stealth', cost: 340, parts: 20, level: 8, insulation: 0.85, insulationRadius: 2, desc: 'Swallows nearly all the noise around it.', flavor: 'Moving blankets. Lots of moving blankets.' },
 
   { id: 'hammock', name: 'Duct Hammock', category: 'living', cost: 95, level: 9, beds: 1, comfort: 4, desc: '1 bed, +4 comfort.', flavor: 'Strung between two ducts like a king.' },
-  { id: 'arcade', name: 'Arcade Cabinet', category: 'leisure', cost: 450, parts: 40, level: 10, power: 60, comfort: 9, noise: 3, noiseWhen: 'use', light: 2.6, lightColor: '255,60,220', hangout: 'Going for the Galaga high score', desc: '+9 comfort. Loud.', flavor: 'Fun Zone "lost" a Galaga.' },
-  { id: 'bean_bag', name: 'Bean Bag', category: 'leisure', cost: 25, level: 3, seat: true, portable: true, comfort: 2, hangout: 'Sinking into the bean bag', desc: '+2 comfort.', flavor: 'Filled with mystery beads. Some of them are Skittles.' },
+  { id: 'arcade', name: 'Arcade Cabinet', category: 'living', cost: 450, parts: 40, level: 10, power: 60, comfort: 9, noise: 3, noiseWhen: 'use', light: 2.6, lightColor: '255,60,220', hangout: 'Going for the Galaga high score', desc: '+9 comfort. Loud.', flavor: 'Fun Zone "lost" a Galaga.' },
+  { id: 'bean_bag', name: 'Bean Bag', category: 'living', cost: 25, level: 3, seat: true, portable: true, comfort: 2, hangout: 'Sinking into the bean bag', desc: '+2 comfort.', flavor: 'Filled with mystery beads. Some of them are Skittles.' },
   { id: 'card_table', name: 'Card Table', category: 'living', cost: 20, level: 3, portable: true, comfort: 1, hangout: 'Playing Egyptian Ratscrew', desc: '+1 comfort.', flavor: 'One leg is a stack of Yellow Pages.' },
-  { id: 'dartboard', name: 'Dartboard', category: 'leisure', cost: 35, level: 4, comfort: 2, noise: 1.2, noiseWhen: 'use', hangout: "Throwing darts at the developer's headshot", desc: '+2 comfort. Thuddy.', flavor: "The developer's face is pinned to the bullseye." },
-  { id: 'disco_ball', name: 'Disco Ball', category: 'leisure', cost: 90, parts: 10, level: 6, power: 10, comfort: 4, light: 3, lightColor: '210,225,255', hangout: 'Practicing the Cha-Cha Slide', desc: '+4 comfort.', flavor: "Rescued from the Spencer's clearance bin. Still spins." },
-  { id: 'ball_pit', name: 'Ball Pit', category: 'leisure', cost: 300, parts: 10, level: 9, seat: true, comfort: 7, noise: 1.5, noiseWhen: 'use', hangout: 'Swimming in the ball pit', desc: '+7 comfort. Rustles.', flavor: 'Fun Zone condemned it. Fun Zone was right.' },
-  { id: 'throne', name: 'The Throne', category: 'leisure', cost: 1200, parts: 30, level: 10, seat: true, power: 30, comfort: 16, unique: true, light: 3, lightColor: '255,215,90', hangout: 'Sitting on the throne', desc: '+16 comfort. Every kingdom needs one.', flavor: 'A Sharper Idea massage chair. It hums.' },
+  { id: 'dartboard', name: 'Dartboard', category: 'living', cost: 35, level: 4, comfort: 2, noise: 1.2, noiseWhen: 'use', hangout: "Throwing darts at the developer's headshot", desc: '+2 comfort. Thuddy.', flavor: "The developer's face is pinned to the bullseye." },
+  { id: 'disco_ball', name: 'Disco Ball', category: 'living', cost: 90, parts: 10, level: 6, power: 10, comfort: 4, light: 3, lightColor: '210,225,255', hangout: 'Practicing the Cha-Cha Slide', desc: '+4 comfort.', flavor: "Rescued from the Spencer's clearance bin. Still spins." },
+  { id: 'ball_pit', name: 'Ball Pit', category: 'living', cost: 300, parts: 10, level: 9, seat: true, comfort: 7, noise: 1.5, noiseWhen: 'use', hangout: 'Swimming in the ball pit', desc: '+7 comfort. Rustles.', flavor: 'Fun Zone condemned it. Fun Zone was right.' },
+  { id: 'throne', name: 'The Throne', category: 'living', cost: 1200, parts: 30, level: 10, seat: true, power: 30, comfort: 16, unique: true, light: 3, lightColor: '255,215,90', hangout: 'Sitting on the throne', desc: '+16 comfort. Every kingdom needs one.', flavor: 'A Sharper Idea massage chair. It hums.' },
+  { id: 'hot_tub', name: 'Hot Tub', category: 'living', cost: 650, parts: 35, level: 10, seat: true, power: 80, comfort: 10, noise: 1.2, noiseWhen: 'use', light: 2.4, lightColor: '43,255,240', hangout: 'Soaking in the hot tub', desc: '+10 comfort. Bubbles.', flavor: "Spa Depot's floor model. Filled one bucket at a time from the janitor's sink." },
 ];
 
 export const BUILDS: BuildDef[] = [...BUILDS_AS_WRITTEN].sort((a, b) => a.level - b.level);
@@ -173,12 +176,12 @@ export const JOBS: JobDef[] = [
   { id: 'samples', name: 'Sample Hunter', shift: 'day', spot: 'samples', level: 1, stat: 'charm', cycle: 30, sketch: 0.3, desc: 'Teriyaki Temple hands out chicken on toothpicks. Take one. Take forty.', yields: 'Food', risk: 'low' },
   { id: 'boundaries', name: 'Read at Boundaries', shift: 'day', spot: 'boundaries', level: 3, stat: 'charm', cycle: 60, sketch: 0.15, desc: 'Sit on the floor and read a whole novel. Nobody minds.', yields: 'Mood', risk: 'none' },
   { id: 'returns', name: 'Searz Returns', shift: 'day', spot: 'returns', level: 3, stat: 'charm', cycle: 60, sketch: 1.2, desc: '"I lost the receipt." Goods into cash. Best price, most Heat.', yields: 'Goods → $$', risk: 'medium' },
-  { id: 'kiosk', name: 'Work the Kiosk', shift: 'day', spot: 'kiosk', level: 6, stat: 'charm', cycle: 45, sketch: -0.6, desc: 'Sell goods from your kiosk. Looking legit cools Heat.', yields: 'Goods → $', risk: 'none' },
+  { id: 'kiosk', name: 'Work the Kiosk', shift: 'day', spot: 'kiosk', level: 6, stat: 'charm', cycle: 45, sketch: -0.6, desc: 'Sell goods from your cart. A name tag cools Heat.', yields: 'Goods → $', risk: 'none' },
   { id: 'popup', name: 'Staff the Pop-Up', shift: 'day', level: 9, stat: 'charm', cycle: 40, sketch: -0.8, desc: 'Sell goods at holiday markups.', yields: 'Goods → $$', risk: 'none' },
   { id: 'fountain', name: 'Fountain Fishing', shift: 'night', spot: 'fountain', level: 1, stat: 'handy', cycle: 15, sketch: 0, desc: 'A magnet on a shoelace. Every wish has a price, and the price is about 11 cents.', yields: '$', risk: 'low' },
   { id: 'dumpster', name: 'Dumpster Dive', shift: 'night', spot: 'dumpster', level: 1, stat: 'handy', cycle: 20, sketch: 0, desc: 'Food court leftovers hit the dock dumpsters after close.', yields: 'Food, sometimes parts', risk: 'low' },
-  { id: 'vending', name: 'Vending Jiggle', shift: 'night', spot: 'vending', level: 1, stat: 'handy', cycle: 30, sketch: 0, desc: 'The machine in the restroom hall gives up if you rock it right.', yields: 'Food, $', risk: 'low' },
-  { id: 'gary', name: 'Leave Gary a Cinnabomb', shift: 'night', spot: 'gary', level: 1, stat: 'charm', cycle: 30, sketch: 0, desc: 'Gary the night guard is lonely. Leave him a treat (2 food).', yields: "Gary's goodwill", risk: 'medium' },
+  { id: 'vending', name: 'Vending Jiggle', shift: 'night', spot: 'vending', level: 2, stat: 'handy', cycle: 30, sketch: 0, desc: 'The machine in the restroom hall gives up if you rock it right.', yields: 'Food, $', risk: 'low' },
+  { id: 'gary', name: 'Leave Gary a Cinnabomb', shift: 'night', spot: 'gary', level: 2, stat: 'charm', cycle: 30, sketch: 0, desc: 'Gary the night guard is lonely. Leave him a treat (2 food).', yields: "Gary's goodwill", risk: 'medium' },
   { id: 'arcade', name: 'Token Shake', shift: 'night', spot: 'arcade', level: 2, stat: 'handy', cycle: 20, sketch: 0, desc: 'The Fun Zone token machine has a loose panel. Fun Zone counts its tokens.', yields: '$$', risk: 'medium' },
   { id: 'radiohut', name: 'RadioHut Salvage', shift: 'night', spot: 'radiohut', level: 4, stat: 'handy', cycle: 30, sketch: 0, desc: 'The back room is full of returns marked DEFECTIVE. RadioHut counts its stock.', yields: 'Parts', risk: 'medium' },
   { id: 'stockroom', name: 'Stockroom Pilfer', shift: 'night', spot: 'stockroom', level: 2, stat: 'stealth', cycle: 25, sketch: 0, desc: 'Back-of-house overflow boxes. Busted electronics nobody will miss... much.', yields: 'Parts, sometimes goods', risk: 'low' },
@@ -251,31 +254,28 @@ export const ARCHETYPES: Archetype[] = [
   { id: 'gary', title: 'Former Night Guard', stealth: 4, charm: 2, handy: 3, traits: ['routes'], bios: ['Gary knows. Gary has always known. Gary is in.'], look: { hat: 'cap', top: ['#22304a'], hair: ['#5a4a3a'] } },
 ];
 
-export type NookId = 'movie' | 'kitchen' | 'workshop' | 'bunkroom' | 'rumpus';
+export type NookId = 'movie' | 'kitchen' | 'workshop' | 'bunkroom' | 'rumpus' | 'spa';
 
 export interface NookDef {
   id: NookId;
   name: string;
-  anchor: BuildId[];
-  slots: BuildId[][];
+  items: BuildId[];
   comfort: number;
   bonus: string;
 }
 
 export const NOOK_RADIUS = 2;
 
-const BEDS: BuildId[] = ['sleeping_bag', 'futon', 'bunk', 'hammock'];
-const LIGHTS: BuildId[] = ['lamp', 'lava_lamp', 'xmas', 'disco_ball'];
-
 export const NOOKS: NookDef[] = [
-  { id: 'movie', name: 'Movie Night', anchor: ['tv'], slots: [['futon', 'bean_bag', 'throne'], LIGHTS], comfort: 5, bonus: '+5 comfort' },
-  { id: 'kitchen', name: 'Kitchenette', anchor: ['hot_plate'], slots: [['fridge', 'cooler'], ['card_table']], comfort: 2, bonus: '+2 comfort, less cooking smell' },
-  { id: 'workshop', name: 'Tool Corner', anchor: ['workbench'], slots: [['crate'], ['lamp', 'xmas']], comfort: 0, bonus: 'Faster tinkering' },
-  { id: 'bunkroom', name: 'Bunk Room', anchor: BEDS, slots: [BEDS, ['foam', 'pod']], comfort: 0, bonus: 'Deeper sleep' },
-  { id: 'rumpus', name: 'Rumpus Room', anchor: ['arcade'], slots: [['ball_pit'], ['disco_ball']], comfort: 8, bonus: '+8 comfort' },
+  { id: 'movie', name: 'Movie Night', items: ['tv', 'futon', 'lava_lamp'], comfort: 5, bonus: '+5 comfort' },
+  { id: 'kitchen', name: 'Kitchenette', items: ['hot_plate', 'fridge', 'card_table'], comfort: 2, bonus: '+2 comfort, less cooking smell' },
+  { id: 'workshop', name: 'Tool Corner', items: ['workbench', 'crate', 'lamp'], comfort: 0, bonus: 'Faster tinkering' },
+  { id: 'bunkroom', name: 'Bunk Room', items: ['bunk', 'sleeping_bag', 'foam'], comfort: 0, bonus: 'Deeper sleep' },
+  { id: 'rumpus', name: 'Rumpus Room', items: ['arcade', 'ball_pit', 'disco_ball'], comfort: 8, bonus: '+8 comfort' },
+  { id: 'spa', name: 'Spa Night', items: ['hot_tub', 'xmas', 'hammock'], comfort: 6, bonus: '+6 comfort' },
 ];
 
-export const nooksUsing = (type: BuildId) => NOOKS.filter((n) => n.anchor.includes(type) || n.slots.some((slot) => slot.includes(type)));
+export const nooksUsing = (type: BuildId) => NOOKS.filter((n) => n.items.includes(type));
 
 export const NOOK_TINKER_SPEED = 1.3;
 export const NOOK_SLEEP_SPEED = 1.3;

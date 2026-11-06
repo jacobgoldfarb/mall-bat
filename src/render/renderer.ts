@@ -1,4 +1,4 @@
-import { BUILD, canRotate, type BuildId } from '../game/defs';
+import { BUILD, canRotate, type BuildId, type JobId } from '../game/defs';
 import { C_AC, C_DUCT, C_OPEN, C_SKYLIGHT, E_GATE, E_GLASS, E_OPEN, E_PUBLIC, E_STAFF, H, LAYOUT, N, W, idx, inBounds, type RoomDef } from '../game/layout';
 import { hash2 } from '../game/rng';
 import { guardCone } from '../game/npc';
@@ -8,7 +8,7 @@ import { dayOf, minuteOfDay, phaseAt } from '../game/time';
 import { forecastInspection, forecastLabel } from '../game/inspect';
 import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, sightPolygon } from '../game/world';
 import { popupName } from '../game/sim';
-import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx } from './draw';
+import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx, type WorkMotion } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
 import { drawBuildable, drawFixture, drawFloorSleeper, sleeperSprite } from './objects';
 import { characterIds, drawPropSprite, texture, type Texture } from './sprites';
@@ -34,6 +34,24 @@ interface Drawable {
 }
 
 const WALL_H = 18;
+const WORK_MOTION: Partial<Record<JobId, WorkMotion>> = {
+  fountain: 'rummage',
+  dumpster: 'rummage',
+  samples: 'rummage',
+  radiohut: 'rummage',
+  pallets: 'rummage',
+  stockroom: 'rummage',
+  lostfound: 'rummage',
+  gary: 'rummage',
+  vending: 'jiggle',
+  arcade: 'jiggle',
+  busk: 'sway',
+  tinker: 'hammer',
+  kiosk: 'pitch',
+  popup: 'pitch',
+  returns: 'pitch',
+  boundaries: 'pitch',
+};
 const OUTER_H = 46;
 const FRONT_H = 7;
 const MAP_X = isoX(0, H);
@@ -665,6 +683,7 @@ export class Renderer {
       sleeping,
       alpha: c.hiding ? 0.75 : 1,
       carry: c.carrying.cash + c.carrying.food + c.carrying.parts + c.carrying.goods > 0 && c.layer === 0,
+      work: c.state === 'working' ? WORK_MOTION[c.activeJob] : undefined,
     });
   }
 

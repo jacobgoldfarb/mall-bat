@@ -103,6 +103,12 @@ Impact describes the expected improvement to player experience: **Critical**, **
 - [x] Mall-floor items set up by Bat errands: Asbestos sign, Wet Floor sign, Out of Order bag, Beeping Tamagotchi
 - [ ] Rope drop raising heat: ignored for now
 
+## Progression (Nov 4)
+
+- [x] Threats ramp in silently with lifetime earnings (`pressure`), never announced: Heat L3→L6, complaint inspections L4→L6, power-bill scrutiny L6→L8, pest control L6+, fire marshal L7+
+- [x] Counters land as each threat peaks: foam/fan at L3, decoys and both signs at L5 (Cover Story), kiosk at L6, battery at L8 (Off the Grid)
+- [x] Level 1 slimmed to deck, sleeping bag, crate, lamp, splice and four jobs; cooler, vending and Gary move to L2, hot plate to L3
+
 ## Keep As-Is
 
 - Objectives can remain specific and linear for now.

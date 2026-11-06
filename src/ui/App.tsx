@@ -344,7 +344,7 @@ function Help() {
               <Icon name="rank" /> Levels
             </h4>
             <p>
-              Everything the Bats earn counts toward your level, even after you spend it. Each level unlocks something new. Click the level meter to peek ahead.
+              The more the Bats bring home, the further the crew goes. Each level opens something new. Click the level meter to peek ahead.
             </p>
           </section>
           <section>
@@ -384,7 +384,7 @@ function Help() {
               <Icon name="alert" /> Suspicion
             </h4>
             <p>
-              <b>Suspicion</b> is how sure the mall is that someone lives upstairs. It brings more guards, more cameras and more inspections. It cools off on quiet nights. At <b>100%</b> they tear the ceiling down.
+              <b>Suspicion</b> is how sure the mall is that someone lives upstairs. It brings more guards, more cameras and more inspections. It cools off on quiet nights. At <b>100%</b>, the Bats are evicted.
             </p>
           </section>
           <section>

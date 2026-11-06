@@ -203,15 +203,16 @@ function canPlaceFloor(s: GameState, type: BuildId, x: number, y: number): strin
 
 function findNooks(s: GameState, d: Derived) {
   for (const def of NOOKS) {
+    const [anchorType, ...rest] = def.items;
     for (const anchor of s.objects) {
-      if (!def.anchor.includes(anchor.type) || d.nookOf.has(anchor.id)) continue;
+      if (anchor.type !== anchorType || d.nookOf.has(anchor.id)) continue;
       const members = [anchor];
-      for (const slot of def.slots) {
-        const pick = s.objects.find((o) => slot.includes(o.type) && !members.includes(o) && !d.nookOf.has(o.id) && Math.max(Math.abs(o.x - anchor.x), Math.abs(o.y - anchor.y)) <= NOOK_RADIUS);
+      for (const type of rest) {
+        const pick = s.objects.find((o) => o.type === type && !members.includes(o) && !d.nookOf.has(o.id) && Math.max(Math.abs(o.x - anchor.x), Math.abs(o.y - anchor.y)) <= NOOK_RADIUS);
         if (!pick) break;
         members.push(pick);
       }
-      if (members.length < def.slots.length + 1) continue;
+      if (members.length < def.items.length) continue;
       d.nooks.push({ def, members });
       for (const m of members) d.nookOf.set(m.id, def.id);
     }

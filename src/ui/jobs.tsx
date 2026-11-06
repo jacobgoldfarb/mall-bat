@@ -164,18 +164,8 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
                   ))}
                 </div>
                 <Bar value={c.energy} color={c.energy < 25 ? '#ec5b3c' : '#5ccfc2'} title={`Energy ${Math.round(c.energy)}`} />
-                <Bar value={c.heat} color="#ff2d55" title={`Heat ${Math.round(c.heat)}`} />              </div>
-              <button
-                class={`fill-toggle ${c.fillIn ? 'on' : ''}`}
-                title={
-                  c.fillIn
-                    ? 'If their job is unavailable, they take the best safe job. Click to make them rest instead.'
-                    : 'If their job is unavailable, they rest. Click to let them fill in on the best safe job.'
-                }
-                onClick={(e) => (e.stopPropagation(), setFillIn([c], !c.fillIn))}
-              >
-                {c.fillIn ? 'Fills in' : 'Rests'}
-              </button>
+                <Bar value={c.heat} color="#ff2d55" title={`Heat ${Math.round(c.heat)}`} />
+              </div>
             </div>
           );
         })}

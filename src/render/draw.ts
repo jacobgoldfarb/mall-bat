@@ -90,6 +90,8 @@ export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, 
   ctx.closePath();
 }
 
+export type WorkMotion = 'rummage' | 'jiggle' | 'sway' | 'hammer' | 'pitch';
+
 export interface PersonOpts {
   walking: boolean;
   t: number;
@@ -105,6 +107,7 @@ export interface PersonOpts {
   carry?: boolean;
   mop?: boolean;
   ladder?: boolean;
+  work?: WorkMotion;
 }
 
 function drawLadder(ctx: Ctx, px: number, py: number) {
@@ -124,6 +127,37 @@ function drawLadder(ctx: Ctx, px: number, py: number) {
 
 const WALK_FPS = 0.3;
 
+function workPose(motion: WorkMotion | undefined, t: number) {
+  switch (motion) {
+    case 'rummage':
+      return { squash: 1 - 0.16 * Math.max(0, Math.sin(t * 0.12)), tilt: 0, shift: 0 };
+    case 'jiggle':
+      return { squash: 1, tilt: 0, shift: Math.sin(t * 0.08) > 0.2 ? Math.round(Math.sin(t * 1.3) * 1.5) : 0 };
+    case 'sway':
+      return { squash: 1, tilt: Math.sin(t * 0.14) * 0.09, shift: 0 };
+    case 'hammer':
+      return { squash: 1 - 0.06 * Math.abs(Math.sin(t * 0.35)), tilt: 0, shift: 0 };
+    case 'pitch':
+      return { squash: 1 - 0.03 * Math.max(0, Math.sin(t * 0.09)), tilt: Math.sin(t * 0.045) * 0.03, shift: 0 };
+    default:
+      return { squash: 1, tilt: 0, shift: 0 };
+  }
+}
+
+function drawNote(ctx: Ctx, px: number, py: number, t: number) {
+  const rise = (t * 0.02) % 1;
+  const x = Math.round(px + 9 + Math.sin(rise * 6) * 2);
+  const y = Math.round(py - 38 - rise * 14);
+  ctx.save();
+  ctx.globalAlpha = 1 - rise;
+  ctx.fillStyle = '#ffd23f';
+  ctx.fillRect(x, y - 6, 1, 6);
+  ctx.fillRect(x + 1, y - 6, 3, 1);
+  ctx.fillRect(x + 3, y - 5, 1, 1);
+  ctx.fillRect(x - 2, y - 1, 3, 2);
+  ctx.restore();
+}
+
 function drawSpritePerson(ctx: Ctx, sprite: CharacterSprite, px: number, py: number, o: PersonOpts) {
   const dir = screenDirection(o.facing ?? Math.PI / 4);
   ctx.save();
@@ -139,12 +173,17 @@ function drawSpritePerson(ctx: Ctx, sprite: CharacterSprite, px: number, py: num
   const frame = Math.floor(o.t * WALK_FPS);
   const sneaking = o.crouch && o.walking && sprite.sneak > 0;
   const col = sneaking ? 1 + sprite.walk + (frame % sprite.sneak) : o.walking && sprite.walk ? 1 + (frame % sprite.walk) : 0;
-  if (o.crouch && !sneaking) {
-    ctx.translate(px, py);
-    ctx.scale(1, 0.82);
+  const motion = o.walking ? undefined : o.work;
+  const pose = workPose(motion, o.t);
+  const squash = (o.crouch && !sneaking ? 0.82 : 1) * pose.squash;
+  if (squash !== 1 || pose.tilt || pose.shift) {
+    ctx.translate(px + pose.shift, py);
+    ctx.rotate(pose.tilt);
+    ctx.scale(1, squash);
     drawCharacterFrame(ctx, sprite, 0, 0, dir, col);
   } else drawCharacterFrame(ctx, sprite, px, py, dir, col);
   ctx.restore();
+  if (motion === 'sway') drawNote(ctx, px, py, o.t);
   if (o.carry) {
     ctx.fillStyle = '#c9a46a';
     ctx.fillRect(px - 5, py - 24, 10, 7);

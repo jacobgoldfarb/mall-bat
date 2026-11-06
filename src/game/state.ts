@@ -27,7 +27,7 @@ export interface Agent {
   bubble?: { text: string; until: number; tone?: 'alert' | 'info' | 'happy' };
 }
 
-export type CrewState = 'idle' | 'toWork' | 'working' | 'toHome' | 'sleeping' | 'eating' | 'leisure' | 'toLeisure' | 'toBed' | 'fleeing' | 'evacuating' | 'toErrand' | 'errand' | 'away';
+export type CrewState = 'idle' | 'toWork' | 'working' | 'toHome' | 'sleeping' | 'eating' | 'leisure' | 'toLeisure' | 'toBed' | 'fleeing' | 'evacuating' | 'ducking' | 'toErrand' | 'errand' | 'away';
 
 export interface Carry {
   cash: number;
@@ -104,6 +104,7 @@ export interface Placed {
   delivered?: boolean;
   expires?: number;
   luredBy?: number;
+  deterred?: number;
 }
 
 export type InspectionKind = 'complaint' | 'power' | 'pest' | 'fire' | 'sweep';

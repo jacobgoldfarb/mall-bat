@@ -4,7 +4,7 @@ import { resolveHijinx, startHijinx } from './hijinx';
 import { scheduleNear } from './inspect';
 import { LAYOUT } from './layout';
 import { FOOD_PRICE, addMood } from './needs';
-import { auctionBid, earn, log, pa, phone, pushModal, rand, sfx, unlock } from './ops';
+import { auctionBid, earn, levelOf, log, pa, phone, pushModal, rand, sfx, unlock } from './ops';
 import type { Candidate, GameState } from './state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate } from './time';
 import { markDirty } from './world';
@@ -47,7 +47,7 @@ export function closeStore(s: GameState, id: string) {
   markDirty();
   const r = LAYOUT.rooms[ri];
   pa(s, r.closingLine ?? `${r.name} has closed its doors.`);
-  log(s, `${r.name} is now vacant: nobody is down there to hear you, but the power is cut. The auction bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', {
+  log(s, `${r.name} closed for good. Nobody below to hear you, and no power to steal. The developer's bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', {
     x: Math.floor((r.x0 + r.x1) / 2),
     y: Math.floor((r.y0 + r.y1) / 2),
     layer: 1,
@@ -91,7 +91,7 @@ const SCRIPT: Scripted[] = [
     hour: 23,
     key: 'garyIntro',
     run: (s) =>
-      log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use a Cinnabomb. (Night job: Leave Gary a Cinnabomb.)', 'info'),
+      log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use a Cinnabomb.', 'info'),
   },
   { day: 9, hour: 15, key: 'recruit2', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   { day: 12, hour: 9, key: 'closeSam', run: (s) => closeStore(s, 'samgroovy') },
@@ -130,7 +130,7 @@ const SCRIPT: Scripted[] = [
       pa(s, 'Security note: Trainee Kyle shadows the night shift tonight. Welcome aboard, Kyle!');
     },
   },
-  { day: 45, hour: 15, key: 'fire', run: (s) => scheduleNear(s, 'fire', 'Annual fire code inspection.', 2) },
+  { day: 45, hour: 15, key: 'fire', run: (s) => { if (levelOf(s) >= 7) scheduleNear(s, 'fire', 'Annual fire code inspection.', 2); } },
   {
     day: 48,
     hour: 12,
@@ -153,7 +153,7 @@ const SCRIPT: Scripted[] = [
         art: 'feast',
         body: "The mall is closed for Thanksgiving. The building is silent, except for Gary's radio playing the Lions game.\n\nThe crew is talking about family. Some have one. Some don't.",
         choices: [
-          { label: 'Throw a feast (10 food, big mood boost)', action: 'feast', disabled: s.food < 10 ? 'Needs 10 food' : undefined },
+          { label: 'Throw a feast (10 food)', action: 'feast', disabled: s.food < 10 ? 'Needs 10 food' : undefined },
           { label: 'Ramen as usual', action: 'ok' },
         ],
       }),
@@ -164,11 +164,11 @@ const SCRIPT: Scripted[] = [
     key: 'blackfriday',
     run: (s) => {
       pa(s, "BLACK FRIDAY! Doors are OPEN! Doorbusters at Dillman's and Searz! Please do not trample your fellow shoppers!");
-      log(s, 'Black Friday: triple crowds, packed fountains, massive noise cover. Make money.', 'good');
+      log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs.', 'good');
     },
   },
   { day: 60, hour: 9, key: 'closeClaire', run: (s) => closeStore(s, 'claire') },
-  { day: 61, hour: 8, key: 'cold', run: (s) => log(s, 'December. The ducts are freezing at night. Mood drops without a Space Heater.', 'warn') },
+  { day: 61, hour: 8, key: 'cold', run: (s) => log(s, 'December. The ducts freeze at night. The crew wants a Space Heater.', 'warn') },
   { day: 64, hour: 14, key: 'recruit6', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   {
     day: 70,
@@ -176,7 +176,7 @@ const SCRIPT: Scripted[] = [
     key: 'closeKB',
     run: (s) => {
       closeStore(s, 'kbtoyz');
-      scheduleNear(s, 'pest', 'Holiday pest control sweep.', 3);
+      if (levelOf(s) >= 6) scheduleNear(s, 'pest', 'Holiday pest control sweep.', 3);
     },
   },
   {
@@ -186,7 +186,7 @@ const SCRIPT: Scripted[] = [
     run: (s) => {
       s.flags.blackoutUntil = s.time + 8 * 60;
       pa(s, 'Attention: rolling blackout. Emergency lighting only. Cameras are offline until morning.');
-      log(s, 'BLACKOUT: cameras are down tonight. Your splices are dead too. Perfect night for a heist.', 'good');
+      log(s, 'Blackout. The cameras are down tonight, and so are your splices.', 'good');
     },
   },
   { day: 80, hour: 9, key: 'closeRadio', run: (s) => closeStore(s, 'radiohut') },
@@ -260,7 +260,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     run: (s) => {
       s.rooms.forEach((r) => (r.complaint = Math.max(0, r.complaint - 25)));
       pa(s, 'Good news, staff: Pest Control caught a REAL raccoon in the Food Court ceiling. Mystery solved!');
-      log(s, 'An actual raccoon took the blame. Every store complaint drops by 25.', 'good');
+      log(s, 'An actual raccoon took the blame. The stores below calm down.', 'good');
     },
   },
   {
@@ -269,7 +269,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     when: (s, h) => h === 22 && !s.gary.replaced,
     run: (s) => {
       s.flags.garyAsleepUntil = s.time + 4 * 60 + 60 * 2;
-      log(s, 'Gary brought a pillow tonight. He will be asleep in the Security Office from about midnight. Fewer patrols until 4 AM.', 'good');
+      log(s, 'Gary brought a pillow tonight. Expect him to nod off in the Security Office around midnight.', 'good');
       for (const n of s.npcs) if (n.isGary) n.state = 'asleep';
     },
   },
@@ -280,7 +280,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     run: (s) => {
       s.flags.crackdownUntil = s.time + 3 * 1440;
       pa(s, 'Mall Management reminds guests: our Parental Escort Policy is now in effect. Loitering is prohibited.');
-      log(s, 'Loitering crackdown: day jobs build Heat twice as fast for 3 days.', 'warn');
+      log(s, 'Mall Management is cracking down on loiterers. Day jobs run hot for three days.', 'warn');
     },
   },
   {
@@ -289,7 +289,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     when: (_s, h) => h === 20,
     run: (s) => {
       s.pools.pallets = (s.pools.pallets ?? 0) + 50;
-      log(s, "Dillman's is dumping returns on the loading dock tonight. +50 parts available at Dock Pallets.", 'good');
+      log(s, "Dillman's dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.", 'good');
     },
   },
   {
@@ -300,13 +300,13 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
       const r = rand.pick(s.objects.filter((o) => o.type === 'rope'));
       const ri = LAYOUT.roomAt[r.y * 48 + r.x];
       s.rooms[ri].complaint += 30;
-      log(s, `A kid in ${LAYOUT.rooms[ri].name} pointed at your loose ceiling tile: "Mommy, there's a hole!" Complaints rise.`, 'warn', { x: r.x, y: r.y, layer: 1 });
+      log(s, `A kid in ${LAYOUT.rooms[ri].name} pointed at your loose ceiling tile: "Mommy, there's a hole!" The manager looked up.`, 'warn', { x: r.x, y: r.y, layer: 1 });
     },
   },
   {
     key: 'pestRandom',
     weight: 0.8,
-    when: (s) => dayOf(s.time) > 14,
+    when: (s) => levelOf(s) >= 6,
     run: (s) => scheduleNear(s, 'pest', 'Routine pest inspection.', 1),
   },
   {
@@ -344,7 +344,7 @@ export function dailyCandidates(s: GameState) {
     pushModal(s, {
       title: 'Gary Knows',
       art: 'gary',
-      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE CINNABOMBS. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits and joins you, he brings his knowledge of every patrol route. A new guard will replace him, one who has never had a Cinnabomb.\n\nOr Gary keeps the job and stays on the inside: he goes easy on you and tips you off.`,
+      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE CINNABOMBS. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits, he brings every patrol route with him. His replacement has never had a Cinnabomb.\n\nIf he stays, he goes easy on you and tips you off.`,
       choices: [
         { label: 'Gary joins the crew', action: 'gary_join' },
         { label: 'Gary stays on the inside', action: 'gary_insider' },
@@ -419,7 +419,7 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
     }
     case 'gary_insider':
       s.gary.insider = true;
-      log(s, 'Gary stays on the job. From now on he takes the long way around, whistles before corners, and suspicion rises more slowly.', 'good');
+      log(s, 'Gary stays on the job. From now on he takes the long way around, and whistles before corners.', 'good');
       return;
   }
 }

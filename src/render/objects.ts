@@ -394,6 +394,9 @@ function buildableEffects(ctx: Ctx, type: BuildId, x: number, y: number, t: numb
       return glow('#ff2bd6', 30, 16);
     case 'throne':
       return glow('#ffd700', 24, 20);
+    case 'hot_tub':
+      if (powered) steam(ctx, x, y, t);
+      return glow('#2bfff0', 10, 18);
   }
 }
 

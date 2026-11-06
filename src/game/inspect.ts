@@ -1,6 +1,6 @@
 import { BUILD } from './defs';
 import { LAYOUT, N, W, idx, inBounds } from './layout';
-import { log, notify, pa, rand, raiseSuspicion, sfx, unlock } from './ops';
+import { log, notify, pa, pressure, rand, raiseSuspicion, sfx, unlock } from './ops';
 import type { GameState, Inspection, InspectionKind, Placed } from './state';
 import { dayOf, minuteOfDay } from './time';
 import { getDerived, markDirty, roomTiles } from './world';
@@ -45,7 +45,7 @@ export function scheduleInspection(s: GameState, room: number, kind: InspectionK
 const MAX_PENDING_COMPLAINTS = 2;
 const ROUTINE_CHECK_SUSPICION = 20;
 
-export const inspectionChancePerDay = (s: GameState) => 0.15 + s.suspicion * 0.015;
+export const inspectionChancePerDay = (s: GameState) => (0.15 + s.suspicion * 0.015) * pressure(s, 4, 6);
 
 export function rollInspection(s: GameState) {
   if (s.inspections.filter((i) => i.kind === 'complaint' && i.state !== 'done').length >= MAX_PENDING_COMPLAINTS) return;
@@ -106,6 +106,7 @@ export interface InspectionForecast {
   confiscated: Placed[];
   stashed: Placed[];
   decoy: Placed | null;
+  sign: Placed | null;
   deckTiles: number[];
   crewHome: boolean;
   value: number;
@@ -115,9 +116,9 @@ export function forecastInspection(s: GameState, ins: Inspection): InspectionFor
   const d = getDerived(s);
   const sus = scrutiny(s, ins);
   const crewHome = s.crew.some((c) => c.layer === 1 && c.state !== 'away');
-  const base = { scrutiny: sus, confiscated: [], stashed: [], decoy: null, deckTiles: [], crewHome, value: 0 };
-  const signs = ins.kind !== 'fire' && ins.kind !== 'sweep' && d.signs.some((o) => Math.max(Math.abs(o.x - ins.x), Math.abs(o.y - ins.y)) <= BUILD[o.type].deterRadius!);
-  if (signs && sus < SIGN_LIMIT) return { ...base, verdict: 'sign' };
+  const base = { scrutiny: sus, confiscated: [], stashed: [], decoy: null, sign: null, deckTiles: [], crewHome, value: 0 };
+  const sign = ins.kind === 'fire' || ins.kind === 'sweep' ? undefined : d.signs.find((o) => Math.max(Math.abs(o.x - ins.x), Math.abs(o.y - ins.y)) <= BUILD[o.type].deterRadius!);
+  if (sign && sus < SIGN_LIMIT) return { ...base, verdict: 'sign', sign };
   const decoy = s.objects.find((o) => BUILD[o.type].decoy && inZone(ins, o.x, o.y));
   if (decoy && sus < RACCOON_LIMIT) return { ...base, verdict: 'raccoon', decoy };
 
@@ -143,10 +144,12 @@ export function forecastInspection(s: GameState, ins: Inspection): InspectionFor
   return { ...base, verdict: 'search', confiscated, stashed, deckTiles, value };
 }
 
+export const signUsesLeft = (o: Placed) => (BUILD[o.type].deterUses ?? Infinity) - (o.deterred ?? 0);
+
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 export function forecastLabel(f: InspectionForecast): string {
-  if (f.verdict === 'sign') return "They'll see the sign and leave";
+  if (f.verdict === 'sign') return signUsesLeft(f.sign!) === 1 ? "They'll see the sign and leave · it comes down after" : "They'll see the sign and leave";
   if (f.verdict === 'raccoon') return "They'll blame the raccoon";
   const parts: string[] = [];
   if (f.confiscated.length || f.deckTiles.length) parts.push(`Will find ${count(f.confiscated.length, 'item')} + ${count(f.deckTiles.length, 'deck')} ($${f.value})`);
@@ -168,7 +171,15 @@ export function revealInspection(s: GameState, ins: Inspection) {
     s.excuseFatigue += SIGN_FATIGUE;
     rs.complaint = Math.max(0, rs.complaint - 30);
     s.stats.inspectionsFoundNothing++;
-    log(s, `Dale shined his flashlight on the ASBESTOS sign above ${room.name}, said "nope," and wrote it up as checked.${tired ? ' He did squint at it longer this time.' : ''}`, 'good', focus);
+    const sign = forecast.sign!;
+    sign.deterred = (sign.deterred ?? 0) + 1;
+    const spent = signUsesLeft(sign) <= 0;
+    if (spent) {
+      s.objects = s.objects.filter((o) => o !== sign);
+      markDirty();
+    }
+    const aside = spent ? ' On his way out, he peeled the sign off and took it with him.' : tired ? ' He did squint at it longer this time.' : '';
+    log(s, `Dale shined his flashlight on the ASBESTOS sign above ${room.name}, said "nope," and wrote it up as checked.${aside}`, 'good', focus);
     sfx('good');
     return;
   }

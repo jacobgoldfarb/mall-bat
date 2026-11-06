@@ -56,6 +56,12 @@ export function earn(s: GameState, amount: number) {
 
 export const levelOf = (s: GameState) => LEVELS.filter((l) => s.totalEarned >= l.earned).length;
 
+export function pressure(s: GameState, fromLevel: number, fullAtLevel: number): number {
+  const from = levelInfo(fromLevel).earned;
+  const full = levelInfo(fullAtLevel).earned;
+  return Math.min(1, Math.max(0, (s.totalEarned - from) / (full - from)));
+}
+
 function levelUp(s: GameState, level: number) {
   s.level = level;
   const { title } = levelInfo(level);

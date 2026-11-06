@@ -6,7 +6,7 @@ import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, rollInspection, schedule
 import { LAYOUT, N, W, H, idx, inBounds } from './layout';
 import { FOOD_PRICE, MEAL_HOURS, hourlyMood, serveMeal } from './needs';
 import { checkObjectives } from './objectives';
-import { auctionBid, earn, log, pa, raiseSuspicion, rand, sfx, suspicionDecay, unlock, updateCameras } from './ops';
+import { auctionBid, earn, log, pa, pressure, raiseSuspicion, rand, sfx, suspicionDecay, unlock, updateCameras } from './ops';
 import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateCrewDanger, updateMallItems, updateNpcs } from './npc';
 import type { GameState, Placed } from './state';
 import { AUCTION_DAY, dayOf, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
@@ -163,7 +163,7 @@ function billReview(s: GameState) {
   LAYOUT.rooms.forEach((r, ri) => {
     const rs = s.rooms[ri];
     if (!r.ceiling) return;
-    const cap = r.powerCap * POWER_MULT[s.difficulty];
+    const cap = r.powerCap * POWER_MULT[s.difficulty] * (3 - 2 * pressure(s, 6, 8));
     if (rs.power > cap) {
       const taps = s.objects.filter((o) => o.type === 'splice' && o.tapRoom === ri).sort((a, b) => b.supplyLoad - a.supplyLoad);
       const at = taps[0] ? { x: taps[0].x, y: taps[0].y } : undefined;

@@ -780,6 +780,14 @@
     "base": 39
    }
   ],
+  "build.hot_tub": [
+   {
+    "file": "build.hot_tub.png",
+    "w": 54,
+    "h": 35,
+    "base": 54
+   }
+  ],
   "build.throne": [
    {
     "file": "build.throne.png",

@@ -168,6 +168,7 @@ export const ASSETS: AssetSpec[] = [
   build('pod', 'soundproof sleeping pod tent built from gray moving blankets over a frame', 'a do not disturb sign', [64, 64], 58),
   build('hammock', 'striped hammock strung between two silver ducts', 'a pillow inside', [64, 48], 56),
   build('arcade', 'stolen upright arcade cabinet with neon pink marquee, scratched sides', 'duct tape on the joystick', [48, 80], 38),
+  build('hot_tub', 'round wooden hot tub full of bubbling teal water with a little steam', 'a rubber duck floating and a pool noodle draped over the rim', [64, 48], 56),
   build('throne', 'massage chair turned into a throne with a paper burger king crown on top', 'christmas lights wrapped around', [48, 64], 46),
   build(
     'siphon',
