@@ -1,4 +1,7 @@
+import { inject } from '@vercel/analytics';
 import { render } from 'preact';
+
+if (location.protocol === 'https:') inject();
 import { app, LEVEL_UP_MS, MINUTES_PER_SECOND, refresh, toast } from './app';
 import { audio } from './audio/audio';
 import { newGame, saveGame } from './game/create';

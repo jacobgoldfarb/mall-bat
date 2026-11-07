@@ -195,11 +195,11 @@ export function jobUnavailable(s: GameState, c: Crew, job: JobId): string | null
 export function planJob(s: GameState, c: Crew): JobId {
   const job = assignedJob(s, c);
   if (job === 'rest' || !jobUnavailable(s, c, job)) return job;
-  return c.fillIn ? fillInJob(s, c) : 'rest';
+  return 'rest';
 }
 
 export function currentJob(s: GameState, c: Crew): JobId {
-  const committed = (c.state === 'toWork' || c.state === 'working') && (c.activeJob === assignedJob(s, c) || c.fillIn);
+  const committed = (c.state === 'toWork' || c.state === 'working') && c.activeJob === assignedJob(s, c);
   return committed ? c.activeJob : planJob(s, c);
 }
 
@@ -231,7 +231,7 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
       if (s.flags.garyGiftDay === nightKey(s)) return 'Already left a gift tonight';
       break;
     case 'radiohut':
-      if (s.rooms[LAYOUT.roomIndex['radiohut']].vacant) return 'RadioHut has closed';
+      if (s.rooms[LAYOUT.roomIndex['radiohut']].vacant) return 'The Source has closed';
       break;
   }
   const pool = POOL_OF[job];
@@ -437,7 +437,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       s.gary.affinity = Math.min(100, s.gary.affinity + 6 + stat(s, c, 'charm') * 2);
       s.gary.gifts++;
       s.flags.garyGiftDay = nightKey(s);
-      log(s, `${c.name} left a warm Cinnabomb outside the Security Office. Gary's goodwill: ${s.gary.affinity.toFixed(0)}/100.`, 'good');
+      log(s, `${c.name} left a sleeve of NY Fries outside the Security Office. Gary's goodwill: ${s.gary.affinity.toFixed(0)}/100.`, 'good');
       return false;
     }
     case 'busk': {
@@ -463,7 +463,6 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       const got = Math.round(rand.range(50, 80) * (lot / LOT) * (pro ? 1.4 : 1) * (boxingDay ? 1.8 : 1));
       k.cash += got;
       c.heat += pro ? 4 : 8;
-      raiseSuspicion(s, 0.6, 'Searz loss prevention flagged a return');
       c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       return s.goods > 0;
     }
@@ -514,7 +513,7 @@ export function escapeGoals(n: number) {
   return n >= N && !(zoneState && inActiveZone(zoneState, (n - N) % W, Math.floor((n - N) / W)));
 }
 
-function startHome(s: GameState, c: Crew, thought = 'Heading home') {
+export function sendCrewHome(s: GameState, c: Crew, thought = 'Heading home') {
   if (c.layer === 1) {
     c.state = 'idle';
     return;
@@ -577,7 +576,7 @@ function decide(s: GameState, c: Crew) {
     else {
       const assigned = assignedJob(s, c);
       const why = assigned !== 'rest' && jobUnavailable(s, c, assigned);
-      startHome(s, c, why ? `Heading home. ${why}` : 'Heading home');
+      sendCrewHome(s, c, why ? `Heading home. ${why}` : 'Heading home');
     }
     return;
   }
@@ -617,7 +616,7 @@ function finishErrand(s: GameState, c: Crew) {
     markDirty();
     log(s, `${c.name} set up the ${def.name}.`, 'good', { x: o.x, y: o.y, layer: 0 });
   }
-  startHome(s, c, 'Errand done. Heading home');
+  sendCrewHome(s, c, 'Errand done. Heading home');
 }
 
 function startWork(s: GameState, c: Crew, job: JobId) {
@@ -796,7 +795,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
           c.waitUntil = s.time + 50;
           c.useObj = -1;
           c.bubble = { text: '!?', until: s.time + 8, tone: 'alert' };
-          startHome(s, c, source ? `${source.name} is coming. Backing off` : 'Too exposed. Backing off');
+          sendCrewHome(s, c, source ? `${source.name} is coming. Backing off` : 'Too exposed. Backing off');
         }
         moveAgent(c, crewSpeed(c) * 1.3, dt);
         if ((c.layer as number) === 1) {
@@ -917,7 +916,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         return;
       case 'toErrand': {
         const o = s.objects.find((x) => x.id === c.useObj);
-        if (!o) return startHome(s, c, 'Errand cancelled. Heading home');
+        if (!o) return sendCrewHome(s, c, 'Errand cancelled. Heading home');
         c.state = 'errand';
         c.timer = ERRAND_MINUTES;
         setThought(c, `Setting up the ${BUILD[o.type].name}`);
@@ -933,7 +932,7 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       const job = currentJob(s, c);
       if (job !== c.activeJob) {
         c.useObj = -1;
-        return c.layer === 0 && job === 'rest' ? startHome(s, c, 'Shift over. Heading home') : decide(s, c);
+        return c.layer === 0 && job === 'rest' ? sendCrewHome(s, c, 'Shift over. Heading home') : decide(s, c);
       }
       c.workTimer -= dt;
       if (c.energy <= 0 && c.thought !== 'Overworked') setThought(c, 'Overworked');
@@ -1014,7 +1013,7 @@ export function restCrew(s: GameState, c: Crew) {
   if (shift === 'night') c.nightJob = 'rest';
   if (c.state === 'away' || c.state === 'fleeing') return;
   c.useObj = -1;
-  if (c.layer === 0) startHome(s, c, 'Calling it. Heading home');
+  if (c.layer === 0) sendCrewHome(s, c, 'Calling it. Heading home');
   else {
     c.state = 'idle';
     c.timer = 0;
@@ -1034,9 +1033,7 @@ function escaped(s: GameState, c: Crew) {
   c.state = 'idle';
   c.detect = 0;
   s.stats.spotted++;
-  s.spottedTonight = true;
   deposit(s, c);
-  raiseSuspicion(s, 3, `${c.name} was seen fleeing into the ceiling`);
   log(s, `${c.name} made it back up. That was close.`, 'warn', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 1 });
   sfx('escape');
   for (const n of s.npcs) if (n.chaseId === c.id) n.state = 'search';

@@ -1,5 +1,5 @@
 import { BUILD, LOT, NOOK_SMELL, canRotate, type BuildId } from './defs';
-import { agentNode, coolHeat, crewLeaves, crowdNow, idleBubble, noiseFromCrew, updateCrew } from './crew';
+import { agentNode, coolHeat, crewLeaves, crowdNow, idleBubble, noiseFromCrew, sendCrewHome, updateCrew } from './crew';
 import { dailyCandidates, randomHourly, runScript } from './events';
 import { ferretForage } from './hijinx';
 import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, rollInspection, scheduleInspection } from './inspect';
@@ -284,7 +284,10 @@ function onHour(s: GameState) {
 
 function onPhase(s: GameState, next: Phase) {
   if (next === 'open') pa(s, 'Good morning, shoppers! Northgate Mall is now open.');
-  if (next === 'closing') pa(s, 'Attention shoppers: Northgate Mall is now closed. Please make your way to the nearest exit. Thank you for shopping with us!');
+  if (next === 'closing') {
+    pa(s, 'Attention shoppers: Northgate Mall is now closed. Please make your way to the nearest exit. Thank you for shopping with us!');
+    for (const c of s.crew) if (c.layer === 0 && c.state !== 'away' && c.state !== 'fleeing') sendCrewHome(s, c, 'Shift over. Heading home');
+  }
   if (next === 'night') {
     log(s, 'The lights dim. Gary starts his rounds.', 'info');
     if (s.crew.some((c) => c.nightJob !== 'rest')) s.flags.workedTonight = 1;
@@ -343,7 +346,7 @@ function substep(s: GameState, dt: number) {
     s.over = {
       won: false,
       title: 'EVICTED',
-      text: 'At 7 AM, eight police officers and Dale from Maintenance pulled down every ceiling tile in Northgate Mall.\n\nThey found the plywood. The extension cords. The lava lamp. The futon. A LiveJournal printout titled "my kingdom."\n\nYour crew is trespassed from the property for life. Somewhere above Hot Spot, a lava lamp is still glowing.',
+      text: 'At 7 AM, eight police officers and Dale from Maintenance pulled down every ceiling tile in Northgate Mall.\n\nThey found the plywood. The extension cords. The lava lamp. The futon. A LiveJournal printout titled "my kingdom."\n\nYour crew is trespassed from the property for life. Somewhere above Spencer\'s, a lava lamp is still glowing.',
     };
   }
   if (!s.over && s.crew.length === 0) {

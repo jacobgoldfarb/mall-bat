@@ -4,7 +4,7 @@ Fall 2004. A dying mall, a crew of squatters, a ceiling full of plywood. The gam
 
 ## The register
 
-- **Deadpan, specific, warm.** "Your cart is in the fountain." Real nouns beat adjectives: Cinnabomb, Yellowcard, a Dave Matthews sticker.
+- **Deadpan, specific, warm.** "Your cart is in the fountain." Real nouns beat adjectives: NY Fries, Yellowcard, a Dave Matthews sticker.
 - **The world talks, the UI doesn't.** Jokes live in flavor lines, PA announcements, logs and events. Mechanics text is plain and short.
 - **One joke per surface.** If a line has a joke, it doesn't also need an exclamation mark, a pun and a pop-culture reference.
 - **Never explain the joke, never sell it.** No "kooky", "hilarious", "chaos ensues".

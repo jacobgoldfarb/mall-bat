@@ -1216,6 +1216,46 @@ button {
   padding: 22px 24px 20px;
 }
 
+.jobs-menu.shift-day {
+  background: repeating-linear-gradient(0deg, rgba(255, 214, 140, 0.05) 0 2px, transparent 2px 4px), #3d2c14;
+}
+
+.jobs-menu.shift-night {
+  background: repeating-linear-gradient(0deg, rgba(178, 141, 255, 0.06) 0 2px, transparent 2px 4px), #1a1436;
+}
+
+.jobs-menu.shift-day .staff-card,
+.jobs-menu.shift-day .bat-chip {
+  background: #4e3a1c;
+}
+
+.jobs-menu.shift-night .staff-card,
+.jobs-menu.shift-night .bat-chip {
+  background: #2a2152;
+}
+
+.jobs-menu.shift-day .slots {
+  background: #241808;
+}
+
+.jobs-menu.shift-night .slots {
+  background: #110e24;
+}
+
+.jobs-menu.shift-day .staff-card.can-add:hover,
+.jobs-menu.shift-day .staff-card.over {
+  background: #65502a;
+}
+
+.jobs-menu.shift-night .staff-card.can-add:hover,
+.jobs-menu.shift-night .staff-card.over {
+  background: #3a2e68;
+}
+
+.jobs-menu .bat-chip.on {
+  background: var(--teal-1);
+}
+
 .jobs-title {
   display: flex;
   justify-content: space-between;
@@ -1520,6 +1560,27 @@ button {
 .slot-chip:hover {
   background: var(--red);
   text-decoration: line-through;
+}
+
+.slot-chip.on {
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--cream);
+  font-size: 13px;
+}
+
+.slot-chip.on:hover {
+  background: var(--orange);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.staff-card.has-pick,
+.staff-card.has-pick.can-add:hover,
+.staff-card.has-pick.over {
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    inset 3px 0 0 var(--risk, var(--teal-3));
 }
 
 .slot-empty {

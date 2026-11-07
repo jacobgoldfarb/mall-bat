@@ -195,7 +195,6 @@ function guardHear(s: GameState, n: Npc, noise: Float32Array) {
   sfx('huh');
   const ri = LAYOUT.roomAt[i];
   if (ri >= 0) s.rooms[ri].complaint += 12;
-  raiseSuspicion(s, 1, `${n.name} heard something in the ceiling`);
   log(s, `${n.name} stopped under ${LAYOUT.rooms[ri]?.name ?? 'the ceiling'}: "...did that ceiling just creak?"`, 'warn', { x: Math.floor(n.x), y: Math.floor(n.y), layer: 0 });
 }
 
@@ -251,13 +250,18 @@ function updateGuard(s: GameState, n: Npc, dt: number, noise: Float32Array) {
         return;
       }
       const d = Math.hypot(target.x - n.x, target.y - n.y);
-      if (d < 0.7) {
-        n.state = 'search';
-        n.timer = 10;
-        n.chaseId = -1;
-        n.bubble = { text: 'GOTCHA', until: s.time + 15, tone: 'alert' };
-        crewCaught(s, target, n.name);
-        return;
+      if (d < 0.7 && (n.grabUntil ?? 0) <= s.time) {
+        n.grabUntil = s.time + 20;
+        spottedHeat(target);
+        if (target.heat >= 100) {
+          n.state = 'search';
+          n.timer = 10;
+          n.chaseId = -1;
+          n.bubble = { text: 'GOTCHA', until: s.time + 15, tone: 'alert' };
+          crewCaught(s, target, n.name);
+          return;
+        }
+        target.bubble = { text: '!!', until: s.time + 8, tone: 'alert' };
       }
       const sees = d < 9 && lineOfSight(n.x, n.y, target.x, target.y);
       if (sees) n.lastSeen = { x: target.x, y: target.y, t: s.time };
@@ -468,6 +472,10 @@ export function detection(s: GameState, dt: number) {
       continue;
     }
     if (phase === 'open' || phase === 'morning') {
+      if (c.state === 'working') {
+        const sketch = JOB[currentJob(s, c)].sketch;
+        if (sketch !== 0) heatTick(s, c, sketch / 60, dt);
+      }
       for (const n of s.npcs) {
         if (n.kind !== 'dayguard') continue;
         const cone = guardCone(n, s);
@@ -475,8 +483,7 @@ export function detection(s: GameState, dt: number) {
         const ri = LAYOUT.roomAt[idx(Math.floor(c.x), Math.floor(c.y))];
         const kind = ri >= 0 ? LAYOUT.rooms[ri].kind : 'concourse';
         const backstage = ['service', 'maint', 'security', 'office', 'dock'].includes(kind);
-        const job = currentJob(s, c);
-        const rate = backstage ? 3 : c.state === 'working' ? JOB[job].sketch : 0.06;
+        const rate = backstage ? 1 : c.state === 'working' ? 0 : 0.06;
         if (rate !== 0) heatTick(s, c, rate, dt);
         if (backstage && (c.bubble?.until ?? 0) < s.time) {
           c.bubble = { text: '...', until: s.time + 6 };
@@ -551,7 +558,6 @@ export function detection(s: GameState, dt: number) {
         const reporter = bestSource ? 'A janitor' : `Camera ${cameraHit + 1}`;
         if (bestSource) bestSource.bubble = { text: '!', until: s.time + 15, tone: 'alert' };
         if (cameraHit >= 0) s.cameras[cameraHit].cooldown = s.time + 30;
-        raiseSuspicion(s, bestSource ? 2 : 3, `${reporter} saw someone after hours`);
         log(s, `${reporter} spotted ${c.name}. Security is on the way.`, 'bad', tile);
         const guard = s.npcs.find((n) => n.kind === 'guard' && n.state !== 'chase' && n.state !== 'asleep' && n.state !== 'offduty');
         if (guard) {
@@ -579,8 +585,7 @@ export function staffDoorCheck(s: GameState, c: Crew, fromNode: number, toNode: 
     if (n.kind !== 'dayguard') continue;
     const cone = guardCone(n, s);
     if (seesCrew(n.x, n.y, n.facing, cone.fov, cone.range, c)) {
-      heatTick(s, c, 14, 1);
-      raiseSuspicion(s, 1, `${c.name} used the Employees Only door in front of Officer Dana`);
+      heatTick(s, c, 8, 1);
       n.bubble = { text: 'Employees only!', until: s.time + 10, tone: 'alert' };
     }
   }

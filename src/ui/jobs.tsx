@@ -44,14 +44,9 @@ const jobOf = (c: Crew, shift: Shift) => (shift === 'day' ? c.dayJob : c.nightJo
 function setJob(c: Crew, shift: Shift, job: JobId) {
   if (shift === 'day') c.dayJob = job;
   else c.nightJob = job;
+  if (job === 'rest') c.fillIn = false;
   c.waitUntil = 0;
   c.jobCooldown = {};
-  audio.play('click');
-  refresh();
-}
-
-function setFillIn(crew: Crew[], fillIn: boolean) {
-  for (const c of crew) c.fillIn = fillIn;
   audio.play('click');
   refresh();
 }
@@ -84,7 +79,7 @@ export function JobsMenu({ s }: { s: GameState }) {
   const close = () => ((app.menu = 'none'), (draggedCrew = null), refresh());
   return (
     <div class="modal-wrap" onClick={close}>
-      <div class="modal panel jobs-menu" onClick={(e) => e.stopPropagation()}>
+      <div class={`modal panel jobs-menu shift-${shift}`} onClick={(e) => e.stopPropagation()}>
         <div class="jobs-title">
           <h2>Job Board</h2>
           <div class="shift-tabs">
@@ -100,7 +95,7 @@ export function JobsMenu({ s }: { s: GameState }) {
           </button>
         </div>
         <p class="jobs-explain">
-          <b>Drag a Bat onto a job.</b> If it falls through, they rest or fill in somewhere safe. Your call.
+          <b>Drag a Bat onto a job.</b>
         </p>
         <CrewTray s={s} crew={crew} selected={selected} shift={shift} />
         <div class="staff-grid">
@@ -128,12 +123,8 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
     <div class="crew-tray">
       <div class="tray-head">
         <span class="tray-label">{resting ? `THE BATS · ${resting} RESTING` : 'THE BATS'}</span>
-        <span class="tray-label">WHEN A JOB IS UNAVAILABLE, EVERYONE:</span>
-        <button class={`btn small ${crew.every((c) => !c.fillIn) ? 'on' : 'ghost'}`} onClick={() => setFillIn(crew, false)}>
-          Rests
-        </button>
-        <button class={`btn small ${crew.every((c) => c.fillIn) ? 'on' : 'ghost'}`} onClick={() => setFillIn(crew, true)}>
-          Fills in
+        <button class="btn small" disabled={!selected || jobOf(selected, shift) === 'rest'} onClick={() => selected && setJob(selected, shift, 'rest')} title={selected ? `Take ${selected.name} off this shift` : 'Select a Bat'}>
+          Rest{selected ? ` ${selected.name}` : ''}
         </button>
       </div>
       <div class="tray-chips">
@@ -183,7 +174,7 @@ function StaffCard({ s, def, crew, selected, shift }: { s: GameState; def: JobDe
   const canAdd = selected && jobOf(selected, shift) !== def.id;
   return (
     <div
-      class={`staff-card risk-${def.risk} ${over ? 'over' : ''} ${blocked ? 'blocked' : ''} ${canAdd ? 'can-add' : ''}`}
+      class={`staff-card risk-${def.risk} ${over ? 'over' : ''} ${blocked ? 'blocked' : ''} ${canAdd ? 'can-add' : ''} ${selected && staff.some((c) => c.id === selected.id) ? 'has-pick' : ''}`}
       onDragOver={(ev) => (ev.preventDefault(), over || setOver(true))}
       onDragLeave={() => setOver(false)}
       onDrop={(ev) => {
@@ -216,7 +207,7 @@ function StaffCard({ s, def, crew, selected, shift }: { s: GameState; def: JobDe
       <div class="slots">
         {staff.map((c) => (
           <button
-            class="slot-chip"
+            class={`slot-chip ${selected?.id === c.id ? 'on' : ''}`}
             draggable
             onDragStart={(ev) => (ev.stopPropagation(), startDrag(ev, c))}
             onDragEnd={() => ((draggedCrew = null), refresh())}

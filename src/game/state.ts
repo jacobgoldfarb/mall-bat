@@ -88,6 +88,7 @@ export interface Npc extends Agent {
   inspectionId: number;
   isGary: boolean;
   hearCooldown: number;
+  grabUntil?: number;
 }
 
 export interface Placed {

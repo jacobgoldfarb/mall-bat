@@ -67,7 +67,7 @@ export function serveMeal(s: GameState) {
     log(s, `Not enough food: ${eaten}/${need} portions. The Bats went to bed hungry.`, 'bad');
   } else {
     s.missedMeals = 0;
-    if (bought) log(s, `The stash ran short, so someone grabbed ${bought} slice${bought === 1 ? '' : 's'} at Sbarrito's for $${bought * MEALTIME_PRICE}. Stocking up is cheaper.`, 'warn');
+    if (bought) log(s, `The stash ran short, so someone grabbed ${bought} burger${bought === 1 ? '' : 's'} at A&W for $${bought * MEALTIME_PRICE}. Stocking up is cheaper.`, 'warn');
   }
   for (const c of present(s)) {
     if (c.layer !== 1 || (c.state !== 'idle' && c.state !== 'leisure')) continue;

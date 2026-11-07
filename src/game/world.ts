@@ -252,7 +252,7 @@ export function canPlace(s: GameState, type: BuildId, x: number, y: number): str
   if (!s.deck[i]) return 'Needs a plywood deck';
   if (getDerived(s).objAt.has(i)) return 'Something is already here';
   if (def.unique && s.objects.some((o) => o.type === type)) return 'You can only have one';
-  if (type === 'pc' && boundariesSignal(x, y) <= 0) return 'No Wi-Fi here. Get closer to Boundaries Books';
+  if (type === 'pc' && boundariesSignal(x, y) <= 0) return 'No Wi-Fi here. Get closer to Coles';
   if (type === 'splice') {
     const ri = LAYOUT.roomAt[i];
     if (!storeHasPower(s, ri)) return 'This store is vacant. The power is cut.';

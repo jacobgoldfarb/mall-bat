@@ -42,7 +42,7 @@
 - **Wood/cardboard** dominates the ceiling: plywood decks, milk crates, boxes.
 - **Faded denim and khaki** ramps exist for 2004 clothing; characters read best in them.
 - Characters keep a personal palette: animation frames are snapped to the colors of the character's own standing rotations so walk cycles don't flicker.
-- Each store keeps its accent from `layout.ts` (Hot Spot black/red, RadioHut red/white, Blockbusted navy/yellow...).
+- Each store keeps its accent from `layout.ts` (West 49 black/yellow, The Source red/white, Blockbuster navy/yellow...).
 
 ## HUD
 

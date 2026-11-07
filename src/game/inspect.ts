@@ -84,8 +84,6 @@ export function scheduleNear(s: GameState, kind: InspectionKind, reason: string,
 }
 
 const BASE_SCRUTINY: Record<InspectionKind, number> = { pest: 0.15, complaint: 0.25, power: 0.35, fire: 0.5, sweep: 0.9 };
-const SIGN_LIMIT = 0.6;
-const RACCOON_LIMIT = 0.7;
 const SIGN_FATIGUE = 0.04;
 const RACCOON_FATIGUE = 0.05;
 export const FATIGUE_KEPT_PER_DAY = 0.85;
@@ -117,10 +115,11 @@ export function forecastInspection(s: GameState, ins: Inspection): InspectionFor
   const sus = scrutiny(s, ins);
   const crewHome = s.crew.some((c) => c.layer === 1 && c.state !== 'away');
   const base = { scrutiny: sus, confiscated: [], stashed: [], decoy: null, sign: null, deckTiles: [], crewHome, value: 0 };
-  const sign = ins.kind === 'fire' || ins.kind === 'sweep' ? undefined : d.signs.find((o) => Math.max(Math.abs(o.x - ins.x), Math.abs(o.y - ins.y)) <= BUILD[o.type].deterRadius!);
-  if (sign && sus < SIGN_LIMIT) return { ...base, verdict: 'sign', sign };
-  const decoy = s.objects.find((o) => BUILD[o.type].decoy && inZone(ins, o.x, o.y));
-  if (decoy && sus < RACCOON_LIMIT) return { ...base, verdict: 'raccoon', decoy };
+  const ignoresDecoy = ins.kind === 'fire' || ins.kind === 'sweep';
+  const sign = ignoresDecoy ? undefined : d.signs.find((o) => Math.max(Math.abs(o.x - ins.x), Math.abs(o.y - ins.y)) <= BUILD[o.type].deterRadius!);
+  if (sign) return { ...base, verdict: 'sign', sign };
+  const decoy = ignoresDecoy ? undefined : s.objects.find((o) => BUILD[o.type].decoy && inZone(ins, o.x, o.y));
+  if (decoy) return { ...base, verdict: 'raccoon', decoy };
 
   const confiscated: Placed[] = [];
   const stashed: Placed[] = [];

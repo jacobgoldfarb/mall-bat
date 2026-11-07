@@ -29,11 +29,11 @@ export function offerCandidate(s: GameState, c: Candidate, intro: string) {
 }
 
 const RECRUIT_INTROS = [
-  'You spot someone sleeping in the photo booth by the arcade. Again.',
+  'You spot someone sleeping in the photo booth by Galaxy. Again.',
   'A kid keeps "losing" their ride home at closing time. Every night this week.',
   'Someone left a note taped to your ladder: "I know you\'re up there. Can I come up too?"',
   'Earl the janitor mentions a nephew who "needs a place to be for a while, no questions."',
-  'You find someone hiding in the Searz dressing rooms at closing. They look at you. You look at them.',
+  'You find someone hiding in the Sears dressing rooms at closing. They look at you. You look at them.',
 ];
 
 export function closeStore(s: GameState, id: string) {
@@ -91,7 +91,7 @@ const SCRIPT: Scripted[] = [
     hour: 23,
     key: 'garyIntro',
     run: (s) =>
-      log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use a Cinnabomb.', 'info'),
+      log(s, 'Tip: the night guard eats dinner alone in the Security Office. His name tag says GARY. He looks like a man who could use some fries.', 'info'),
   },
   { day: 9, hour: 15, key: 'recruit2', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   { day: 12, hour: 9, key: 'closeSam', run: (s) => closeStore(s, 'samgroovy') },
@@ -163,7 +163,7 @@ const SCRIPT: Scripted[] = [
     hour: 5,
     key: 'blackfriday',
     run: (s) => {
-      pa(s, "BLACK FRIDAY! Doors are OPEN! Doorbusters at Dillman's and Searz! Please do not trample your fellow shoppers!");
+      pa(s, 'BLACK FRIDAY! Doors are OPEN! Doorbusters at Sears and Future Shop! Please do not trample your fellow shoppers!');
       log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs.', 'good');
     },
   },
@@ -235,7 +235,7 @@ export function resolveAuction(s: GameState) {
     s.over = {
       won: true,
       title: 'KING OF NORTHGATE',
-      text: `The auctioneer squints at the shoebox full of fountain quarters, Cinnabomb receipts, and eBay PayPal printouts.\n\n"Sold, for $${Math.floor(s.cash).toLocaleString()}, to... the ceiling people?"\n\nPrestige Lifestyle Developers bid $${bid.toLocaleString()}. You beat them by $${Math.floor(s.cash - bid).toLocaleString()}.\n\nNorthgate Mall is yours. Your crew climbs down the ladder for the last time, and walks out the front doors in broad daylight.`,
+      text: `The auctioneer squints at the shoebox full of fountain quarters, NY Fries receipts, and eBay PayPal printouts.\n\n"Sold, for $${Math.floor(s.cash).toLocaleString()}, to... the ceiling people?"\n\nPrestige Lifestyle Developers bid $${bid.toLocaleString()}. You beat them by $${Math.floor(s.cash - bid).toLocaleString()}.\n\nNorthgate Mall is yours. Your crew climbs down the ladder for the last time, and walks out the front doors in broad daylight.`,
     };
   } else {
     s.over = {
@@ -289,7 +289,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     when: (_s, h) => h === 20,
     run: (s) => {
       s.pools.pallets = (s.pools.pallets ?? 0) + 50;
-      log(s, "Dillman's dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.", 'good');
+      log(s, 'Future Shop dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.', 'good');
     },
   },
   {
@@ -344,7 +344,7 @@ export function dailyCandidates(s: GameState) {
     pushModal(s, {
       title: 'Gary Knows',
       art: 'gary',
-      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE CINNABOMBS. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits, he brings every patrol route with him. His replacement has never had a Cinnabomb.\n\nIf he stays, he goes easy on you and tips you off.`,
+      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE FRIES. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits, he brings every patrol route with him. His replacement has never had NY Fries.\n\nIf he stays, he goes easy on you and tips you off.`,
       choices: [
         { label: 'Gary joins the crew', action: 'gary_join' },
         { label: 'Gary stays on the inside', action: 'gary_insider' },

@@ -320,7 +320,7 @@ function Help() {
               <Icon name="leisure" /> What's Below Matters
             </h4>
             <p>
-              Every store below hides some noise and some smell. A TV over the Fun Zone is fine. A TV over Boundaries Books is not. The <b>Noise</b> and <b>Smell</b> maps show what's leaking.
+              Every store below hides some noise and some smell. A TV over Galaxy is fine. A TV over Coles is not. The <b>Noise</b> and <b>Smell</b> maps show what's leaking.
             </p>
           </section>
           <section>

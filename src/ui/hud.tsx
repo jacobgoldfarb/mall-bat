@@ -83,7 +83,7 @@ export function TopBar({ s }: { s: GameState }) {
         </div>
         <FoodStat s={s} cap={d.foodCap} fridge={!!d.fridge} />
         <Resource scope={s} icon="parts" label="Parts" value={s.parts} cap={d.partsCap} title="Gear is built from these. Spares become goods at a Workbench." />
-        <Resource scope={s} icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Searz Returns pays cash for these, no receipt needed." />
+        <Resource scope={s} icon="goods" label="Goods" value={s.goods} cap={d.goodsCap} title="Sears Returns pays cash for these, no receipt needed." />
         <MoodStat s={s} />
       </div>
       <div class="divider" />
@@ -473,7 +473,7 @@ export function CrewPanel({ s }: { s: GameState }) {
 
 function GaryRow({ s }: { s: GameState }) {
   return (
-    <div class="gary-row" title="Leave him Cinnabombs at night.">
+    <div class="gary-row" title="Leave him NY Fries at night.">
       <Icon name="art.gary" size={16} />
       <span>{s.gary.insider ? 'Gary is your man on the inside.' : `Gary's goodwill · ${Math.round(s.gary.affinity)}/100`}</span>
       {!s.gary.insider && <Bar value={s.gary.affinity} color="linear-gradient(90deg,#ffb000,#ff4fa3)" />}

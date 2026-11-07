@@ -45,7 +45,7 @@ const HIJINX: Hijinx[] = [
     key: 'wallet',
     art: 'wallet',
     title: 'A Wallet Under the Bench',
-    body: (_s, c) => `${c.name} found a velcro wallet under a bench. Inside: $40, a Blockbusted card, and a Polaroid of somebody's dog.`,
+    body: (_s, c) => `${c.name} found a velcro wallet under a bench. Inside: $40, a Blockbuster card, and a Polaroid of somebody's dog.`,
     choices: [
       { label: () => 'Keep the $40', run: (s) => (earn(s, 40), sfx('cash')) },
       {
@@ -64,7 +64,7 @@ const HIJINX: Hijinx[] = [
     title: 'Window Dressing',
     hours: [10, 20],
     body: (_s, c) =>
-      `${c.name} dozed off behind the Abercromp & Snitch window display. The visual merchandiser didn't notice. ${c.name} is now wearing cargo shorts, a puka shell necklace, and a SALE sign.\n\nA crowd is gathering.`,
+      `${c.name} dozed off behind the American Eagle window display. The visual merchandiser didn't notice. ${c.name} is now wearing cargo shorts, a puka shell necklace, and a SALE sign.\n\nA crowd is gathering.`,
     choices: [
       {
         label: () => 'Hold the pose until closing',
@@ -201,7 +201,7 @@ const HIJINX: Hijinx[] = [
     title: 'Mallwalker Turf War',
     hours: [7, 11],
     body: (_s, c) =>
-      `The Northgate Mallwalkers Club says ${c.name} has been cutting corners on their laps. Their captain, Doris, 81, in a matching teal tracksuit, demands satisfaction.\n\nThree laps. Loser buys Orange Jubilee.`,
+      `The Northgate Mallwalkers Club says ${c.name} has been cutting corners on their laps. Their captain, Doris, 81, in a matching teal tracksuit, demands satisfaction.\n\nThree laps. Loser buys Dairy Queen.`,
     choices: [
       {
         label: () => 'Race Doris',
@@ -232,14 +232,14 @@ const HIJINX: Hijinx[] = [
     art: 'vent',
     title: 'The Ceiling Speaks',
     hours: [10, 20],
-    body: (_s, c) => `The vent over EB Gamez carries ${c.name}'s voice straight down. A kid playing the Halo 2 demo just asked the ceiling if it was God.`,
+    body: (_s, c) => `The vent over EB Games carries ${c.name}'s voice straight down. A kid playing the Halo 2 demo just asked the ceiling if it was God.`,
     choices: [
       {
         label: () => 'Speak as the Voice of the Ceiling',
         run: (s, c) => {
           if (passes(s, c, 'charm')) {
             gain(s, { food: 6 });
-            good(s, 'The kids of EB Gamez now leave offerings of Bagel Bites under the vent. The Voice of the Ceiling is pleased.');
+            good(s, 'The kids of EB Games now leave offerings of Bagel Bites under the vent. The Voice of the Ceiling is pleased.');
           } else {
             complain(s, 'ebgamez', 35);
             raiseSuspicion(s, 3, 'the ceiling swore');
@@ -291,7 +291,7 @@ const HIJINX: Hijinx[] = [
     key: 'furby',
     art: 'furby',
     title: 'The Furby Knows',
-    body: (_s, c) => `A Furby fell through a KB Toyz vent and landed in your ceiling. It will not stop talking. It is learning words. It has learned "${c.name}."`,
+    body: (_s, c) => `A Furby fell through a KB Toys vent and landed in your ceiling. It will not stop talking. It is learning words. It has learned "${c.name}."`,
     choices: [
       {
         label: () => 'Teach it to say "ceiling empty"',
@@ -375,7 +375,7 @@ export function ferretForage(s: GameState) {
   if (!s.flags.ferret) return;
   if (rand.chance(0.25)) {
     gain(s, { parts: 5 });
-    log(s, 'Bandit dragged a RadioHut power adapter back through the vents. +5 parts.', 'good');
+    log(s, 'Bandit dragged a Source power adapter back through the vents. +5 parts.', 'good');
   } else {
     const change = rand.int(3, 12);
     earn(s, change);
